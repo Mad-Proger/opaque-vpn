@@ -4,3 +4,6 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.95"
+tokio-rustls = "0.26.1"
+yaml-rust = "0.4.5"
