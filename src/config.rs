@@ -1,12 +1,27 @@
 use anyhow::{anyhow, Context};
-use std::{fs::File, io::Read, net::SocketAddr, path::Path};
+use std::{
+    fs::File,
+    io::Read,
+    net::{Ipv4Addr, SocketAddr},
+    path::Path,
+    str::FromStr,
+};
 use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
 
-#[derive(Debug)]
+pub struct ClientConfig {
+    pub address: SocketAddr,
+}
+
+pub struct ServerConfig {
+    pub port: u16,
+    pub virtual_address: Ipv4Addr,
+    pub subnet_mask: Ipv4Addr,
+}
+
 pub enum Mode {
-    Client(SocketAddr),
-    Server(u16),
+    Client(ClientConfig),
+    Server(ServerConfig),
 }
 
 pub struct TlsConfig {
@@ -72,23 +87,8 @@ fn read_mode(general: &Yaml) -> anyhow::Result<Mode> {
     })?;
 
     match mode_string as &str {
-        "client" => {
-            let address =
-                get_section(section, "address").and_then(|address_value| match address_value {
-                    Yaml::String(address_string) => {
-                        Ok(SocketAddr::parse_ascii(address_string.as_bytes())?)
-                    }
-                    _ => Err(anyhow!("invalid 'address' value")),
-                })?;
-            Ok(Mode::Client(address))
-        }
-        "server" => {
-            let port = get_section(section, "port").and_then(|port_value| match port_value {
-                Yaml::Integer(port) => Ok(u16::try_from(*port)?),
-                _ => Err(anyhow!("invalid 'port' value")),
-            })?;
-            Ok(Mode::Server(port))
-        }
+        "client" => Ok(Mode::Client(read_client(section)?)),
+        "server" => Ok(Mode::Server(read_server(section)?)),
         _ => Err(anyhow!("invalid 'mode' value")),
     }
 }
@@ -112,4 +112,34 @@ fn read_tls(tls: &Yaml) -> anyhow::Result<TlsConfig> {
         certificate: cert,
         key,
     })
+}
+
+fn parse_ipv4(dict: &Hash, name: &str) -> anyhow::Result<Ipv4Addr> {
+    get_section(dict, name).and_then(|address_value| match address_value {
+        Yaml::String(address_string) => Ok(Ipv4Addr::from_str(address_string)?),
+        _ => Err(anyhow!("invalid '{}' value", name)),
+    })
+}
+
+fn read_server(general: &Hash) -> anyhow::Result<ServerConfig> {
+    let port = get_section(general, "port").and_then(|port_value| match port_value {
+        Yaml::Integer(port) => Ok(u16::try_from(*port)?),
+        _ => Err(anyhow!("invalid 'port' value")),
+    })?;
+    let virtual_address = parse_ipv4(general, "virtual_address")?;
+    let subnet_mask = parse_ipv4(general, "subnet_mask")?;
+    Ok(ServerConfig {
+        port,
+        virtual_address,
+        subnet_mask,
+    })
+}
+
+fn read_client(general: &Hash) -> anyhow::Result<ClientConfig> {
+    let address =
+        get_section(general, "address").and_then(|address_value| match address_value {
+            Yaml::String(address_string) => Ok(SocketAddr::parse_ascii(address_string.as_bytes())?),
+            _ => Err(anyhow!("invalid 'address' value")),
+        })?;
+    Ok(ClientConfig { address })
 }
