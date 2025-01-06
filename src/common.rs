@@ -8,6 +8,8 @@ use tokio_rustls::{
     TlsStream,
 };
 
+pub const CONFIGURATION_SIZE: usize = 14;
+
 pub fn get_root_cert_store(root_cert: CertificateDer<'static>) -> anyhow::Result<RootCertStore> {
     let mut store = RootCertStore::empty();
     store.add(root_cert)?;

@@ -1,9 +1,9 @@
 use crate::{
-    common::{full_send, get_root_cert_store, tls_link},
+    common::{full_send, get_root_cert_store, tls_link, CONFIGURATION_SIZE},
     config::{ServerConfig, TlsConfig},
     ip_manager::IpManager,
 };
-use anyhow::{ensure, Context};
+use anyhow::Context;
 use etherparse::IpSlice;
 use futures::{sink, FutureExt};
 use std::{
@@ -83,10 +83,11 @@ impl Server {
         let mut client = self.acceptor.accept(socket).await?;
         let ip = self.get_ip().await?;
 
-        let mut network_info = [0u8; 12];
+        let mut network_info = [0u8; CONFIGURATION_SIZE];
         network_info[..4].copy_from_slice(&ip.octets());
         network_info[4..8].copy_from_slice(&self.gateway.octets());
-        network_info[8..].copy_from_slice(&self.netmask.octets());
+        network_info[8..12].copy_from_slice(&self.netmask.octets());
+        network_info[12..].copy_from_slice(&self.mtu.to_le_bytes());
         full_send(&mut client, &network_info)
             .await
             .context("could not send network configuration")?;
