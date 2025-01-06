@@ -5,6 +5,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.95"
-tokio = { version = "1.42.0", features = ["net", "rt"] }
+etherparse = "0.16.0"
+futures = "0.3.31"
+tokio = { version = "1.42.0", features = ["net", "rt", "sync"] }
 tokio-rustls = "0.26.1"
+tokio-stream = "0.1.17"
+tun = { version = "0.7.10", features = ["async"] }
 yaml-rust = "0.4.5"
