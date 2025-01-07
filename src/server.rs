@@ -1,30 +1,27 @@
 use crate::{
-    common::{full_send, get_root_cert_store, tls_link, CONFIGURATION_SIZE},
+    common::{get_root_cert_store, CONFIGURATION_SIZE},
     config::{ServerConfig, TlsConfig},
     ip_manager::IpManager,
+    packet_stream::{PacketReceiver, PacketSender},
 };
 use anyhow::Context;
 use etherparse::IpSlice;
-use futures::{sink, FutureExt};
+use futures::FutureExt;
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
-    ops::DerefMut,
     sync::Arc,
 };
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt, WriteHalf},
     net::{TcpListener, TcpStream},
-    sync::{
-        mpsc::{channel, Sender},
-        Mutex, RwLock,
-    },
+    sync::Mutex,
 };
 use tokio_rustls::{
     rustls::{self, server::WebPkiClientVerifier},
+    server::TlsStream,
     TlsAcceptor,
 };
-use tokio_stream::wrappers::ReceiverStream;
 use tun::{AbstractDevice, AsyncDevice, DeviceReader, DeviceWriter};
 
 pub struct Server {
@@ -36,7 +33,7 @@ pub struct Server {
     gateway: Ipv4Addr,
     netmask: Ipv4Addr,
     mtu: u16,
-    routes: RwLock<HashMap<Ipv4Addr, Sender<Box<[u8]>>>>,
+    routes: Mutex<HashMap<Ipv4Addr, PacketSender<WriteHalf<TlsStream<TcpStream>>>>>,
 }
 
 impl Server {
@@ -80,36 +77,32 @@ impl Server {
     }
 
     async fn handle_client(self: Arc<Self>, socket: TcpStream) -> anyhow::Result<()> {
-        let mut client = self.acceptor.accept(socket).await?;
-        let ip = self.get_ip().await?;
+        let client = self.acceptor.accept(socket).await?;
+        let (client_reader, client_writer) = tokio::io::split(client);
+        let packet_receiver = PacketReceiver::new(client_reader);
+        let mut packet_sender = PacketSender::new(client_writer);
 
+        let ip = self.get_ip().await?;
         let mut network_info = [0u8; CONFIGURATION_SIZE];
         network_info[..4].copy_from_slice(&ip.octets());
         network_info[4..8].copy_from_slice(&self.gateway.octets());
         network_info[8..12].copy_from_slice(&self.netmask.octets());
         network_info[12..].copy_from_slice(&self.mtu.to_le_bytes());
-        full_send(&mut client, &network_info)
+        let res = packet_sender
+            .send(&network_info)
             .await
-            .context("could not send network configuration")?;
+            .context("could not send network configuration");
+        if let Err(e) = res {
+            self.ip_manager.lock().await.release(ip);
+            return Err(e);
+        }
 
-        let (sender, receiver) = channel(1);
-        self.routes.write().await.insert(ip, sender);
-        let receiver_stream = ReceiverStream::new(receiver);
-        // what the actual fuck?!
-        let send_sink = Box::pin(sink::unfold(
-            self.clone(),
-            |server, packet: Box<[u8]>| async move {
-                full_send(server.tun_writer.lock().await.deref_mut(), &packet).await?;
-                Ok(server)
-            },
-        ));
+        self.routes.lock().await.insert(ip, packet_sender);
+        if let Err(e) = self.clone().forward_packets(packet_receiver).await {
+            eprintln!("connection terminated: {}", e);
+        }
 
-        tokio::spawn(tls_link(
-            client.into(),
-            receiver_stream,
-            send_sink,
-            self.mtu as usize,
-        ));
+        self.ip_manager.lock().await.release(ip);
         Ok(())
     }
 
@@ -126,7 +119,6 @@ impl Server {
             if packet_size == 0 {
                 break;
             }
-
             if let Err(e) = route_packet(&self.routes, buf[..packet_size].into()).await {
                 eprintln!("could not route incoming packet: {}", e);
             }
@@ -138,6 +130,16 @@ impl Server {
         let ip = lock.get_free().context("no IP addresses available")?;
         lock.block(ip);
         Ok(ip)
+    }
+
+    async fn forward_packets<IO: AsyncRead + Unpin>(
+        self: Arc<Self>,
+        mut packet_receiver: PacketReceiver<IO>,
+    ) -> anyhow::Result<()> {
+        loop {
+            let packet = packet_receiver.receive().await?;
+            _ = self.tun_writer.lock().await.write(&packet).await?;
+        }
     }
 }
 
@@ -163,16 +165,16 @@ fn configure_tls(tls: TlsConfig) -> anyhow::Result<rustls::ServerConfig> {
 }
 
 async fn route_packet(
-    routes: &RwLock<HashMap<Ipv4Addr, Sender<Box<[u8]>>>>,
+    routes: &Mutex<HashMap<Ipv4Addr, PacketSender<WriteHalf<TlsStream<TcpStream>>>>>,
     packet: Box<[u8]>,
 ) -> anyhow::Result<()> {
     // TODO: implement broadcast
     let destination = get_packet_destination(&packet)?;
-    let lock = routes.read().await;
+    let mut lock = routes.lock().await;
     let route = lock
-        .get(&destination)
+        .get_mut(&destination)
         .context(format!("no route to {}", destination))?;
-    route.send(packet).await?;
+    route.send(&packet).await?;
     Ok(())
 }
 
