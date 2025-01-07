@@ -9,11 +9,11 @@ use std::{
     sync::Arc,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadHalf, WriteHalf},
     net::TcpStream,
 };
 use tokio_rustls::{rustls, TlsConnector};
-use tun::{AbstractDevice, DeviceReader, DeviceWriter};
+use tun::{AbstractDevice, AsyncDevice};
 
 pub struct Client {
     connector: TlsConnector,
@@ -41,7 +41,7 @@ impl Client {
         let tun_config = configure_tun(&mut packet_receiver).await?;
         let device = tun::create_as_async(&tun_config)?;
         let mtu = device.mtu().unwrap() as usize;
-        let (tun_writer, tun_reader) = device.split()?;
+        let (tun_reader, tun_writer) = tokio::io::split(device);
 
         let send_fut = send_tun(packet_receiver, tun_writer);
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu);
@@ -92,7 +92,7 @@ async fn configure_tun<IO: AsyncRead + Unpin>(
 
 async fn send_tun<IO: AsyncRead + Unpin>(
     mut receiver: PacketReceiver<IO>,
-    mut tun: DeviceWriter,
+    mut tun: WriteHalf<AsyncDevice>,
 ) -> anyhow::Result<()> {
     loop {
         let packet = receiver.receive().await?;
@@ -102,7 +102,7 @@ async fn send_tun<IO: AsyncRead + Unpin>(
 
 async fn receive_tun<IO: AsyncWrite + Unpin>(
     mut sender: PacketSender<IO>,
-    mut tun: DeviceReader,
+    mut tun: ReadHalf<AsyncDevice>,
     mtu: usize,
 ) -> anyhow::Result<()> {
     let mut buf = vec![0u8; mtu];

@@ -17,6 +17,7 @@ use tokio::runtime::Builder;
 fn main() -> anyhow::Result<()> {
     let config = load_config(std::env::args().nth(1).context("no config file provided")?)?;
     let runtime = Builder::new_current_thread()
+        .enable_io()
         .build()
         .context("could not create runtime")?;
 
@@ -25,9 +26,10 @@ fn main() -> anyhow::Result<()> {
             let client = Client::try_new(client_config, config.tls)?;
             runtime.block_on(client.run())
         }
-        Mode::Server(server_config) => {
-            let server = Server::try_new(server_config, config.tls)?;
-            runtime.block_on(server.run())
-        }
+        Mode::Server(server_config) => runtime.block_on(async move {
+            Server::try_new(server_config, config.tls)
+                .map(|server| server.run())?
+                .await
+        }),
     }
 }

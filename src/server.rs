@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWriteExt, WriteHalf},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
     sync::Mutex,
 };
@@ -22,11 +22,11 @@ use tokio_rustls::{
     server::TlsStream,
     TlsAcceptor,
 };
-use tun::{AbstractDevice, AsyncDevice, DeviceReader, DeviceWriter};
+use tun::{AbstractDevice, AsyncDevice};
 
 pub struct Server {
-    tun_reader: Mutex<DeviceReader>,
-    tun_writer: Mutex<DeviceWriter>,
+    tun_reader: Mutex<ReadHalf<AsyncDevice>>,
+    tun_writer: Mutex<WriteHalf<AsyncDevice>>,
     ip_manager: Mutex<IpManager>,
     acceptor: TlsAcceptor,
     socket_address: SocketAddr,
@@ -42,7 +42,8 @@ impl Server {
         ip_manager.block(config.virtual_address);
         let device = tun_create(&config)?;
         let mtu = device.mtu().context("could not get MTU")?;
-        let (writer, reader) = device.split()?;
+        // native split doesn't work
+        let (reader, writer) = tokio::io::split(device);
 
         Ok(Self {
             tun_reader: reader.into(),
@@ -149,8 +150,8 @@ fn tun_create(config: &ServerConfig) -> anyhow::Result<AsyncDevice> {
         .address(config.virtual_address)
         .netmask(config.subnet_mask)
         .up();
-    let device = tun::create(&tun_config)?;
-    Ok(AsyncDevice::new(device)?)
+    let device = tun::create_as_async(&tun_config).context("could not create TUN interface")?;
+    Ok(device)
 }
 
 fn configure_tls(tls: TlsConfig) -> anyhow::Result<rustls::ServerConfig> {
