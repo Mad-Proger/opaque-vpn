@@ -139,7 +139,6 @@ impl Server {
     ) -> anyhow::Result<()> {
         loop {
             let packet = packet_receiver.receive().await?;
-            eprintln!("forwarding packet");
             _ = self.tun_writer.lock().await.write(&packet).await?;
         }
     }
@@ -172,7 +171,6 @@ async fn route_packet(
 ) -> anyhow::Result<()> {
     // TODO: implement broadcast
     let destination = get_packet_destination(&packet)?;
-    eprintln!("packet to {}", destination);
     let mut lock = routes.lock().await;
     let route = lock
         .get_mut(&destination)
