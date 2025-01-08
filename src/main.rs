@@ -15,6 +15,8 @@ use server::Server;
 use tokio::runtime::Builder;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let config = load_config(std::env::args().nth(1).context("no config file provided")?)?;
     let runtime = Builder::new_current_thread()
         .enable_io()
