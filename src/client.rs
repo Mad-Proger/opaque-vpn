@@ -4,6 +4,7 @@ use crate::{
     packet_stream::{PacketReceiver, PacketSender},
 };
 use anyhow::{ensure, Context};
+use log::error;
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
@@ -47,10 +48,10 @@ impl Client {
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu);
         let (res_send, res_receive) = tokio::join!(send_fut, receive_fut);
         if let Err(e) = res_send {
-            eprintln!("send error: {}", e);
+            error!("send error: {}", e);
         }
         if let Err(e) = res_receive {
-            eprintln!("receive error: {}", e);
+            error!("receive error: {}", e);
         }
 
         Ok(())

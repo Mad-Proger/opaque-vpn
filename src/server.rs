@@ -7,6 +7,7 @@ use crate::{
 use anyhow::Context;
 use etherparse::IpSlice;
 use futures::FutureExt;
+use log::{error, info, warn};
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
@@ -65,14 +66,14 @@ impl Server {
         loop {
             match listener.accept().await {
                 Ok((socket, addr)) => {
-                    println!("incoming connection from {}", addr);
+                    info!("incoming connection from {}", addr);
                     tokio::spawn(self.clone().handle_client(socket).map(|res| {
                         if let Err(e) = res {
-                            eprintln!("{}", e);
+                            warn!("{}", e);
                         }
                     }));
                 }
-                Err(e) => eprintln!("could not accept connection: {}", e),
+                Err(e) => error!("could not accept connection: {}", e),
             };
         }
     }
@@ -100,7 +101,7 @@ impl Server {
 
         self.routes.lock().await.insert(ip, packet_sender);
         if let Err(e) = self.clone().forward_packets(packet_receiver).await {
-            eprintln!("connection terminated: {}", e);
+            info!("connection terminated: {}", e);
         }
 
         self.ip_manager.lock().await.release(ip);
@@ -113,7 +114,7 @@ impl Server {
             let packet_size = match self.tun_reader.lock().await.read(buf.as_mut_slice()).await {
                 Ok(size) => size,
                 Err(e) => {
-                    eprintln!("could not read packet from TUN: {}", e);
+                    error!("could not read packet from TUN: {}", e);
                     continue;
                 }
             };
@@ -121,7 +122,7 @@ impl Server {
                 break;
             }
             if let Err(e) = route_packet(&self.routes, buf[..packet_size].into()).await {
-                eprintln!("could not route incoming packet: {}", e);
+                warn!("could not route incoming packet: {}", e);
             }
         }
     }
