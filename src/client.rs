@@ -82,7 +82,12 @@ async fn configure_tun<IO: AsyncRead + Unpin>(
     let mtu = u16::from_le_bytes(config[12..].try_into().unwrap());
 
     let mut config = tun::configure();
-    config.address(ip).netmask(netmask).mtu(mtu).up();
+    config
+        .address(ip)
+        .destination(gateway)
+        .netmask(netmask)
+        .mtu(mtu)
+        .up();
     Ok(config)
 }
 
