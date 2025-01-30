@@ -1,13 +1,12 @@
-use anyhow::{anyhow, Context};
+use anyhow::{bail, ensure, Context};
+use serde::Deserialize;
 use std::{
     fs::File,
     io::Read,
-    net::{Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr, ToSocketAddrs},
     path::Path,
-    str::FromStr,
 };
 use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
-use yaml_rust::{yaml::Hash, Yaml, YamlLoader};
 
 pub struct ClientConfig {
     pub address: SocketAddr,
@@ -35,6 +34,33 @@ pub struct Config {
     pub tls: TlsConfig,
 }
 
+#[derive(Deserialize)]
+struct RawClient {
+    address: String,
+    port: u16,
+}
+
+#[derive(Deserialize)]
+struct RawServer {
+    port: u16,
+    virtual_address: Ipv4Addr,
+    subnet_mask: Ipv4Addr,
+}
+
+#[derive(Deserialize)]
+struct RawTls {
+    root_certificate: String,
+    certificate: String,
+    key: String,
+}
+
+#[derive(Deserialize)]
+struct RawConfig {
+    client: Option<RawClient>,
+    server: Option<RawServer>,
+    tls: RawTls,
+}
+
 pub fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
     let mut file = File::open(path).context("could not open config file")?;
     let mut raw = String::new();
@@ -42,104 +68,52 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
         .read_to_string(&mut raw)
         .context("could not read config file")?;
 
-    let parsed = YamlLoader::load_from_str(&raw).context("could not parse config")?;
-    read_config(parsed)
+    let raw_config: RawConfig = toml::from_str(&raw).context("could not parse config")?;
+    read_config(raw_config)
 }
 
-fn get_section<'a>(dict: &'a Hash, section: &str) -> anyhow::Result<&'a Yaml> {
-    dict.get(&Yaml::String(section.into()))
-        .context(format!("section '{}' not found", section))
-}
+fn read_config(raw_config: RawConfig) -> anyhow::Result<Config> {
+    ensure!(
+        raw_config.client.is_none() || raw_config.server.is_none(),
+        "config cannot contain both 'client' and 'server' sections"
+    );
 
-fn get_string<'a>(dict: &'a Hash, key: &str) -> anyhow::Result<&'a String> {
-    get_section(dict, key).and_then(|section| match section {
-        Yaml::String(s) => Ok(s),
-        _ => Err(anyhow!("'{}' is not a string", key)),
-    })
-}
+    let mode = if let Some(raw_client) = raw_config.client {
+        Mode::Client(read_client(raw_client)?)
+    } else if let Some(raw_server) = raw_config.server {
+        Mode::Server(read_server(raw_server)?)
+    } else {
+        bail!("config must contain either 'client' or 'server' section");
+    };
+    let tls = read_tls(raw_config.tls)?;
 
-fn read_config(parsed: Vec<Yaml>) -> anyhow::Result<Config> {
-    let sections = parsed
-        .into_iter()
-        .next()
-        .and_then(|node| {
-            if let Yaml::Hash(hashmap) = node {
-                Some(hashmap)
-            } else {
-                None
-            }
-        })
-        .context("expected exactly 1 top-level entry")?;
-
-    let mode = get_section(&sections, "general").and_then(read_mode)?;
-    let tls = get_section(&sections, "tls").and_then(read_tls)?;
     Ok(Config { mode, tls })
 }
 
-fn read_mode(general: &Yaml) -> anyhow::Result<Mode> {
-    let section = match general {
-        Yaml::Hash(s) => Ok(s),
-        _ => Err(anyhow!("section 'general' is not a dictionary")),
-    }?;
-    let mode_string = get_section(section, "mode").and_then(|mode_value| match mode_value {
-        Yaml::String(mode_string) => Ok(mode_string),
-        _ => Err(anyhow!("'mode' is not a string")),
-    })?;
-
-    match mode_string as &str {
-        "client" => Ok(Mode::Client(read_client(section)?)),
-        "server" => Ok(Mode::Server(read_server(section)?)),
-        _ => Err(anyhow!("invalid 'mode' value")),
-    }
+fn read_client(raw_client: RawClient) -> anyhow::Result<ClientConfig> {
+    let address = (raw_client.address.as_str(), raw_client.port)
+        .to_socket_addrs()?
+        .next()
+        .context("could not parse server address")?;
+    Ok(ClientConfig { address })
 }
 
-fn read_tls(tls: &Yaml) -> anyhow::Result<TlsConfig> {
-    let section = match tls {
-        Yaml::Hash(s) => Ok(s),
-        _ => Err(anyhow!("section 'tls' is not a dictionary")),
-    }?;
+fn read_server(raw_server: RawServer) -> anyhow::Result<ServerConfig> {
+    Ok(ServerConfig {
+        port: raw_server.port,
+        virtual_address: raw_server.virtual_address,
+        subnet_mask: raw_server.subnet_mask,
+    })
+}
 
-    let root_cert_string = get_string(section, "root_certificate")?;
-    let cert_string = get_string(section, "certificate")?;
-    let key_string = get_string(section, "key")?;
-
-    let root_cert = CertificateDer::from_pem_slice(root_cert_string.as_bytes())?;
-    let cert = CertificateDer::from_pem_slice(cert_string.as_bytes())?;
-    let key = PrivateKeyDer::from_pem_slice(key_string.as_bytes())?;
+fn read_tls(raw_tls: RawTls) -> anyhow::Result<TlsConfig> {
+    let root_cert = CertificateDer::from_pem_slice(raw_tls.root_certificate.as_bytes())?;
+    let cert = CertificateDer::from_pem_slice(raw_tls.certificate.as_bytes())?;
+    let key = PrivateKeyDer::from_pem_slice(raw_tls.key.as_bytes())?;
 
     Ok(TlsConfig {
         root_certificate: root_cert,
         certificate: cert,
         key,
     })
-}
-
-fn parse_ipv4(dict: &Hash, name: &str) -> anyhow::Result<Ipv4Addr> {
-    get_section(dict, name).and_then(|address_value| match address_value {
-        Yaml::String(address_string) => Ok(Ipv4Addr::from_str(address_string)?),
-        _ => Err(anyhow!("invalid '{}' value", name)),
-    })
-}
-
-fn read_server(general: &Hash) -> anyhow::Result<ServerConfig> {
-    let port = get_section(general, "port").and_then(|port_value| match port_value {
-        Yaml::Integer(port) => Ok(u16::try_from(*port)?),
-        _ => Err(anyhow!("invalid 'port' value")),
-    })?;
-    let virtual_address = parse_ipv4(general, "virtual_address")?;
-    let subnet_mask = parse_ipv4(general, "subnet_mask")?;
-    Ok(ServerConfig {
-        port,
-        virtual_address,
-        subnet_mask,
-    })
-}
-
-fn read_client(general: &Hash) -> anyhow::Result<ClientConfig> {
-    let address =
-        get_section(general, "address").and_then(|address_value| match address_value {
-            Yaml::String(address_string) => Ok(SocketAddr::parse_ascii(address_string.as_bytes())?),
-            _ => Err(anyhow!("invalid 'address' value")),
-        })?;
-    Ok(ClientConfig { address })
 }
