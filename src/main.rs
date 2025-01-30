@@ -6,6 +6,7 @@ mod common;
 mod config;
 mod ip_manager;
 mod packet_stream;
+mod routing;
 mod server;
 
 use anyhow::Context;
