@@ -61,10 +61,9 @@ impl Router {
     }
 
     pub async fn route_packet(&self, packet: Box<[u8]>) -> anyhow::Result<()> {
-        if let RoutingResult::Error(err) = self.route_local(&packet).await {
-            return Err(err);
-        }
-
+        // if let RoutingResult::Error(err) = self.route_local(&packet).await {
+        //     return Err(err);
+        // }
         let mut lock = self.tun_writer.lock().await;
         let mut offset = 0;
         while offset < packet.len() {
