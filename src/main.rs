@@ -8,6 +8,7 @@ mod ip_manager;
 mod packet_stream;
 mod routing;
 mod server;
+mod unsplit;
 
 use anyhow::Context;
 use client::Client;

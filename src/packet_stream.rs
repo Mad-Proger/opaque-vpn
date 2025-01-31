@@ -24,6 +24,10 @@ impl<IO: AsyncRead + Unpin> PacketReceiver<IO> {
 
         Ok(packet)
     }
+
+    pub fn into_inner(self) -> IO {
+        self.stream
+    }
 }
 
 pub struct PacketSender<IO> {
@@ -51,5 +55,9 @@ impl<IO: AsyncWrite + Unpin> PacketSender<IO> {
             offset += written;
         }
         self.stream.flush().await
+    }
+
+    pub fn into_inner(self) -> IO {
+        self.stream
     }
 }
