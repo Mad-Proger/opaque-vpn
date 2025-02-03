@@ -1,8 +1,5 @@
-use std::ptr::read;
-
 use tokio::io::{ReadHalf, WriteHalf};
 
-#[derive(Default)]
 pub struct Unsplit<T> {
     read_half: Option<ReadHalf<T>>,
     write_half: Option<WriteHalf<T>>,
@@ -31,6 +28,12 @@ impl std::fmt::Display for UnsplitError {
 impl std::error::Error for UnsplitError {}
 
 impl<T: Unpin> Unsplit<T> {
+    pub fn new() -> Self {
+        Self {
+            read_half: None,
+            write_half: None,
+        }
+    }
     pub fn save_write_half(&mut self, write_half: WriteHalf<T>) -> Result<(), UnsplitError> {
         if self.write_half.is_some() {
             return Err(UnsplitError::Occupied);
