@@ -13,7 +13,7 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
-    sync::{watch, Mutex},
+    sync::watch,
 };
 use tokio_rustls::{rustls, TlsConnector};
 use tun::{AbstractDevice, AsyncDevice};
