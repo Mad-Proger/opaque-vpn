@@ -10,6 +10,7 @@ use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKey
 
 pub struct ClientConfig {
     pub address: SocketAddr,
+    pub reroute: bool,
 }
 
 pub struct ServerConfig {
@@ -38,6 +39,7 @@ pub struct Config {
 struct RawClient {
     address: String,
     port: u16,
+    reroute: bool,
 }
 
 #[derive(Deserialize)]
@@ -95,7 +97,10 @@ fn read_client(raw_client: RawClient) -> anyhow::Result<ClientConfig> {
         .to_socket_addrs()?
         .next()
         .context("could not parse server address")?;
-    Ok(ClientConfig { address })
+    Ok(ClientConfig {
+        address,
+        reroute: raw_client.reroute,
+    })
 }
 
 fn read_server(raw_server: RawServer) -> anyhow::Result<ServerConfig> {

@@ -5,7 +5,7 @@ use crate::{
     system_route::RouteManager,
     unsplit::Unsplit,
 };
-use anyhow::{ensure, Context, bail};
+use anyhow::{bail, ensure, Context};
 use log::error;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -24,6 +24,7 @@ pub struct Client {
     socket_address: SocketAddr,
     stop_sender: watch::Sender<bool>,
     stop_receiver: watch::Receiver<bool>,
+    reroute: bool
 }
 
 impl Client {
@@ -34,6 +35,7 @@ impl Client {
             socket_address: config.address,
             stop_sender: sender,
             stop_receiver: receiver,
+            reroute: config.reroute,
         })
     }
 
@@ -61,14 +63,18 @@ impl Client {
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu, self.stop_receiver.clone());
         let (res_send, res_receive) = tokio::join!(send_fut, receive_fut);
 
-        let IpAddr::V4(remote_ipv4) = self.socket_address.ip() else {
-            bail!("IPv6 rerouting is not supported");
-        };
-        let IpAddr::V4(vpn_ipv4) = vpn_addr else {
-            bail!("IPv6 rerouting is not supported");
-        };
-        let mut route_manager = RouteManager::try_new()?;
-        route_manager.reroute(vpn_ipv4, remote_ipv4)?;
+        let mut route_manager = None;
+
+        if self.reroute {
+            let IpAddr::V4(remote_ipv4) = self.socket_address.ip() else {
+                bail!("IPv6 rerouting is not supported");
+            };
+            let IpAddr::V4(vpn_ipv4) = vpn_addr else {
+                bail!("IPv6 rerouting is not supported");
+            };
+            route_manager = RouteManager::try_new()?.into();
+            route_manager.as_mut().unwrap().reroute(vpn_ipv4, remote_ipv4)?;
+        }
 
         let mut unsplitter = Unsplit::new();
         if let Err(e) =
@@ -85,7 +91,9 @@ impl Client {
             stream.shutdown().await?;
         }
 
-        route_manager.reset()?;
+        if let Some(mut manager) = route_manager.take() {
+            manager.reset()?;
+        }
         Ok(())
     }
 }
