@@ -122,12 +122,11 @@ impl DefaultRoute {
         Ok(())
     }
 
-    pub fn reroute(&mut self, gateway: Ipv4Addr) -> anyhow::Result<()> {
+    pub fn reroute(&mut self, gateway: Ipv4Addr, preserved: Ipv4Addr) -> anyhow::Result<()> {
         self.reset()?;
-        let ip_dword = unsafe { htonl(gateway.to_bits()) };
 
         let mut gateway_route = MIB_IPFORWARDROW {
-            dwForwardDest: ip_dword,
+            dwForwardDest: unsafe { htonl(preserved.to_bits()) },
             dwForwardMask: u32::MAX,
             dwForwardPolicy: 0,
             dwForwardNextHop: self.original.dwForwardNextHop,
@@ -151,7 +150,7 @@ impl DefaultRoute {
         self.new_gateway = Some(gateway_route);
 
         let mut new_default = self.original;
-        new_default.dwForwardNextHop = ip_dword;
+        new_default.dwForwardNextHop = unsafe { htonl(gateway.to_bits()) };
         let err_code = unsafe { SetIpForwardEntry(&mut new_default) };
         ensure!(
             err_code == NO_ERROR,
