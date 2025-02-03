@@ -2,12 +2,13 @@ use crate::{
     common::{full_send, get_root_cert_store, CONFIGURATION_SIZE},
     config::{ClientConfig, TlsConfig},
     packet_stream::{PacketReceiver, PacketSender},
+    system_route::RouteManager,
     unsplit::Unsplit,
 };
-use anyhow::{ensure, Context};
+use anyhow::{ensure, Context, bail};
 use log::error;
 use std::{
-    net::{Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
 use tokio::{
@@ -53,11 +54,21 @@ impl Client {
         let tun_config = configure_tun(&mut packet_receiver).await?;
         let device = tun::create_as_async(&tun_config)?;
         let mtu = device.mtu().unwrap() as usize;
+        let vpn_addr = device.address().unwrap();
         let (tun_reader, tun_writer) = tokio::io::split(device);
 
         let send_fut = send_tun(packet_receiver, tun_writer, self.stop_receiver.clone());
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu, self.stop_receiver.clone());
         let (res_send, res_receive) = tokio::join!(send_fut, receive_fut);
+
+        let IpAddr::V4(remote_ipv4) = self.socket_address.ip() else {
+            bail!("IPv6 rerouting is not supported");
+        };
+        let IpAddr::V4(vpn_ipv4) = vpn_addr else {
+            bail!("IPv6 rerouting is not supported");
+        };
+        let mut route_manager = RouteManager::try_new()?;
+        route_manager.reroute(vpn_ipv4, remote_ipv4)?;
 
         let mut unsplitter = Unsplit::new();
         if let Err(e) =
@@ -74,6 +85,7 @@ impl Client {
             stream.shutdown().await?;
         }
 
+        route_manager.reset()?;
         Ok(())
     }
 }
