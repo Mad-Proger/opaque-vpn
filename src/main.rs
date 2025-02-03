@@ -8,10 +8,12 @@ mod ip_manager;
 mod packet_stream;
 mod routing;
 mod server;
+mod unsplit;
 
 use anyhow::Context;
 use client::Client;
 use config::{load_config, Mode};
+use log::error;
 use server::Server;
 use tokio::runtime::Builder;
 
@@ -27,6 +29,13 @@ fn main() -> anyhow::Result<()> {
     match config.mode {
         Mode::Client(client_config) => {
             let client = Client::try_new(client_config, config.tls)?;
+            let stop_sender = client.stop_sender();
+            ctrlc::set_handler(move || {
+                if let Err(err) = stop_sender.send(true) {
+                    error!("could not stop: {}", err);
+                }
+            })
+            .context("could not set Ctrl-C handler")?;
             runtime.block_on(client.run())
         }
         Mode::Server(server_config) => runtime.block_on(async move {
