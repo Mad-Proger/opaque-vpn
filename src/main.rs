@@ -6,6 +6,7 @@ mod common;
 mod config;
 mod ip_manager;
 mod packet_stream;
+mod protocol;
 mod routing;
 mod server;
 mod unsplit;
