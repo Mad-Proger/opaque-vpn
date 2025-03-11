@@ -1,16 +1,13 @@
 use crate::{
-    common::{full_send, get_root_cert_store, CONFIGURATION_SIZE},
+    common::{full_send, get_root_cert_store},
     config::{ClientConfig, TlsConfig},
     packet_stream::{PacketReceiver, PacketSender},
     protocol::{Connection, NetworkConfig},
     unsplit::Unsplit,
 };
-use anyhow::{ensure, Context};
+use anyhow::Context;
 use log::error;
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    sync::Arc,
-};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,

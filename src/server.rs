@@ -17,9 +17,9 @@ use tokio_rustls::{
 use tun::{AbstractDevice, AsyncDevice};
 
 use crate::{
-    common::{get_root_cert_store, CONFIGURATION_SIZE},
+    common::get_root_cert_store,
     config::{ServerConfig, TlsConfig},
-    packet_stream::{PacketReceiver, PacketSender},
+    packet_stream::PacketReceiver,
     protocol::{Connection, NetworkConfig},
     routing::{Router, RouterConfig},
 };
