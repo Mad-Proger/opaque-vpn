@@ -1,13 +1,7 @@
-use crate::{
-    common::{full_send, get_root_cert_store},
-    config::{ClientConfig, TlsConfig},
-    packet_stream::{PacketReceiver, PacketSender},
-    protocol::{Connection, NetworkConfig},
-    unsplit::Unsplit,
-};
+use std::{net::SocketAddr, sync::Arc};
+
 use anyhow::Context;
 use log::error;
-use std::{net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -15,6 +9,14 @@ use tokio::{
 };
 use tokio_rustls::{rustls, TlsConnector};
 use tun::{AbstractDevice, AsyncDevice};
+
+use crate::{
+    common::{full_send, get_root_cert_store},
+    config::{ClientConfig, TlsConfig},
+    packet_stream::{PacketReceiver, PacketSender},
+    protocol::{Connection, NetworkConfig},
+    unsplit::Unsplit,
+};
 
 pub struct Client {
     connector: TlsConnector,

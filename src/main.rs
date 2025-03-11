@@ -12,11 +12,12 @@ mod server;
 mod unsplit;
 
 use anyhow::Context;
+use log::error;
+use tokio::runtime::Builder;
+
 use client::Client;
 use config::{load_config, Mode};
-use log::error;
 use server::Server;
-use tokio::runtime::Builder;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
