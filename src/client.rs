@@ -2,6 +2,7 @@ use crate::{
     common::{full_send, get_root_cert_store, CONFIGURATION_SIZE},
     config::{ClientConfig, TlsConfig},
     packet_stream::{PacketReceiver, PacketSender},
+    protocol::{Connection, NetworkConfig},
     unsplit::Unsplit,
 };
 use anyhow::{ensure, Context};
@@ -47,13 +48,18 @@ impl Client {
             .connect(self.socket_address.ip().into(), socket)
             .await?;
         let (client_reader, client_writer) = tokio::io::split(client);
-        let mut packet_receiver = PacketReceiver::new(client_reader);
-        let packet_sender = PacketSender::new(client_writer);
+        let mut protocol_connection = Connection::new(client_reader, client_writer);
 
-        let tun_config = configure_tun(&mut packet_receiver).await?;
+        let network_config = protocol_connection
+            .receive_config()
+            .await
+            .context("could not receive network config")?;
+        let tun_config = configure_tun(network_config);
         let device = tun::create_as_async(&tun_config)?;
         let mtu = device.mtu().unwrap() as usize;
+
         let (tun_reader, tun_writer) = tokio::io::split(device);
+        let (packet_sender, packet_receiver) = protocol_connection.into_parts();
 
         let send_fut = send_tun(packet_receiver, tun_writer, self.stop_receiver.clone());
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu, self.stop_receiver.clone());
@@ -84,31 +90,15 @@ fn configure_tls(tls: TlsConfig) -> anyhow::Result<rustls::ClientConfig> {
         .with_client_auth_cert(vec![tls.certificate, tls.root_certificate], tls.key)?)
 }
 
-async fn configure_tun<IO: AsyncRead + Unpin>(
-    receiver: &mut PacketReceiver<IO>,
-) -> anyhow::Result<tun::Configuration> {
-    let config = receiver
-        .receive()
-        .await
-        .context("could not receive configuration")?;
-    ensure!(
-        config.len() == CONFIGURATION_SIZE,
-        "invalid configuration format received"
-    );
-
-    let ip = Ipv4Addr::from_octets(config[..4].try_into().unwrap());
-    let gateway = Ipv4Addr::from_octets(config[4..8].try_into().unwrap());
-    let netmask = Ipv4Addr::from_octets(config[8..12].try_into().unwrap());
-    let mtu = u16::from_le_bytes(config[12..].try_into().unwrap());
-
+fn configure_tun(network_config: NetworkConfig) -> tun::Configuration {
     let mut config = tun::configure();
     config
-        .address(ip)
-        .destination(gateway)
-        .netmask(netmask)
-        .mtu(mtu)
+        .address(network_config.client_ip)
+        .destination(network_config.server_ip)
+        .netmask(network_config.netmask)
+        .mtu(network_config.mtu)
         .up();
-    Ok(config)
+    config
 }
 
 async fn send_tun<IO: AsyncRead + Unpin>(
