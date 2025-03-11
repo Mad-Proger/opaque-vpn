@@ -77,11 +77,7 @@ where
         config_bytes.as_ref().try_into()
     }
 
-    pub async fn send_packet(&mut self, packet: &[u8]) -> std::io::Result<()> {
-        self.sender.send(packet).await
-    }
-
-    pub async fn receive_packet(&mut self) -> std::io::Result<Box<[u8]>> {
-        self.receiver.receive().await
+    pub fn into_parts(self) -> (PacketSender<Writer>, PacketReceiver<Reader>) {
+        (self.sender, self.receiver)
     }
 }
