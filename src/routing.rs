@@ -15,9 +15,9 @@ use tokio::{
 use tokio_rustls::server::TlsStream;
 use tun::AsyncDevice;
 
-use crate::{ip_manager::IpManager, packet_stream::PacketSender};
+use crate::{ip_manager::IpManager, packet_stream::TaggedPacketSender};
 
-type PacketSink = PacketSender<WriteHalf<TlsStream<TcpStream>>>;
+type PacketSink = TaggedPacketSender<WriteHalf<TlsStream<TcpStream>>>;
 
 pub struct Router {
     ip_manager: Mutex<IpManager>,

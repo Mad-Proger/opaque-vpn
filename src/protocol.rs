@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 use anyhow::Context;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::packet_stream::{PacketReceiver, PacketSender};
+use crate::packet_stream::{TaggedPacketReceiver, TaggedPacketSender};
 
 pub struct NetworkConfig {
     pub client_ip: Ipv4Addr,
@@ -51,8 +51,8 @@ impl TryFrom<&[u8]> for NetworkConfig {
 }
 
 pub struct Connection<Reader, Writer> {
-    receiver: PacketReceiver<Reader>,
-    sender: PacketSender<Writer>,
+    receiver: TaggedPacketReceiver<Reader>,
+    sender: TaggedPacketSender<Writer>,
 }
 
 impl<Reader, Writer> Connection<Reader, Writer>
@@ -62,8 +62,8 @@ where
 {
     pub fn new(reader: Reader, writer: Writer) -> Self {
         Self {
-            receiver: PacketReceiver::new(reader),
-            sender: PacketSender::new(writer),
+            receiver: TaggedPacketReceiver::new(reader),
+            sender: TaggedPacketSender::new(writer),
         }
     }
 
@@ -77,7 +77,7 @@ where
         config_bytes.as_ref().try_into()
     }
 
-    pub fn into_parts(self) -> (PacketSender<Writer>, PacketReceiver<Reader>) {
+    pub fn into_parts(self) -> (TaggedPacketSender<Writer>, TaggedPacketReceiver<Reader>) {
         (self.sender, self.receiver)
     }
 }

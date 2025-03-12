@@ -1,10 +1,10 @@
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub struct PacketReceiver<IO> {
+pub struct TaggedPacketReceiver<IO> {
     stream: IO,
 }
 
-impl<IO: AsyncRead + Unpin> PacketReceiver<IO> {
+impl<IO: AsyncRead + Unpin> TaggedPacketReceiver<IO> {
     pub fn new(stream: IO) -> Self {
         Self { stream }
     }
@@ -30,11 +30,11 @@ impl<IO: AsyncRead + Unpin> PacketReceiver<IO> {
     }
 }
 
-pub struct PacketSender<IO> {
+pub struct TaggedPacketSender<IO> {
     stream: IO,
 }
 
-impl<IO: AsyncWrite + Unpin> PacketSender<IO> {
+impl<IO: AsyncWrite + Unpin> TaggedPacketSender<IO> {
     pub fn new(stream: IO) -> Self {
         Self { stream }
     }

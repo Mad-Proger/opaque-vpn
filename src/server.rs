@@ -19,7 +19,7 @@ use tun::{AbstractDevice, AsyncDevice};
 use crate::{
     common::get_root_cert_store,
     config::{ServerConfig, TlsConfig},
-    packet_stream::PacketReceiver,
+    packet_stream::TaggedPacketReceiver,
     protocol::{Connection, NetworkConfig},
     routing::{Router, RouterConfig},
 };
@@ -107,7 +107,7 @@ impl Server {
 
     async fn forward_packets<IO: AsyncRead + Unpin>(
         self: Arc<Self>,
-        mut packet_receiver: PacketReceiver<IO>,
+        mut packet_receiver: TaggedPacketReceiver<IO>,
     ) -> anyhow::Result<()> {
         loop {
             let packet = packet_receiver.receive().await?;

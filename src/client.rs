@@ -13,7 +13,7 @@ use tun::{AbstractDevice, AsyncDevice};
 use crate::{
     common::{full_send, get_root_cert_store},
     config::{ClientConfig, TlsConfig},
-    packet_stream::{PacketReceiver, PacketSender},
+    packet_stream::{TaggedPacketReceiver, TaggedPacketSender},
     protocol::{Connection, NetworkConfig},
     unsplit::Unsplit,
 };
@@ -101,10 +101,10 @@ fn configure_tun(network_config: NetworkConfig) -> tun::Configuration {
 }
 
 async fn send_tun<IO: AsyncRead + Unpin>(
-    mut receiver: PacketReceiver<IO>,
+    mut receiver: TaggedPacketReceiver<IO>,
     mut tun: WriteHalf<AsyncDevice>,
     mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<PacketReceiver<IO>> {
+) -> anyhow::Result<TaggedPacketReceiver<IO>> {
     while !*stop_receiver.borrow_and_update() {
         let stop_fut = stop_receiver.changed();
         let packet_fut = receiver.receive();
@@ -125,11 +125,11 @@ async fn send_tun<IO: AsyncRead + Unpin>(
 }
 
 async fn receive_tun<IO: AsyncWrite + Unpin>(
-    mut sender: PacketSender<IO>,
+    mut sender: TaggedPacketSender<IO>,
     mut tun: ReadHalf<AsyncDevice>,
     mtu: usize,
     mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<PacketSender<IO>> {
+) -> anyhow::Result<TaggedPacketSender<IO>> {
     let mut buf = vec![0u8; mtu];
     while !*stop_receiver.borrow_and_update() {
         let stop_fut = stop_receiver.changed();
