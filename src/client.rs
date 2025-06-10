@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
-use log::error;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -15,7 +14,6 @@ use crate::{
     config::{ClientConfig, TlsConfig},
     packet_stream::{TaggedPacketReceiver, TaggedPacketSender},
     protocol::{Connection, NetworkConfig},
-    unsplit::Unsplit,
 };
 
 pub struct Client {
@@ -62,22 +60,7 @@ impl Client {
 
         let send_fut = send_tun(packet_receiver, tun_writer, self.stop_receiver.clone());
         let receive_fut = receive_tun(packet_sender, tun_reader, mtu, self.stop_receiver.clone());
-        let (res_send, res_receive) = tokio::join!(send_fut, receive_fut);
-
-        let mut unsplitter = Unsplit::new();
-        if let Err(e) =
-            res_send.and_then(|read_half| Ok(unsplitter.save_read_half(read_half.into_inner())?))
-        {
-            error!("{}", e);
-        }
-        if let Err(e) = res_receive
-            .and_then(|write_half| Ok(unsplitter.save_write_half(write_half.into_inner())?))
-        {
-            error!("{}", e);
-        }
-        if let Some(mut stream) = unsplitter.unsplit() {
-            stream.shutdown().await?;
-        }
+        tokio::try_join!(send_fut, receive_fut)?;
 
         Ok(())
     }
@@ -104,7 +87,7 @@ async fn send_tun<IO: AsyncRead + Unpin>(
     mut receiver: TaggedPacketReceiver<IO>,
     mut tun: WriteHalf<AsyncDevice>,
     mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<TaggedPacketReceiver<IO>> {
+) -> anyhow::Result<()> {
     while !*stop_receiver.borrow_and_update() {
         let stop_fut = stop_receiver.changed();
         let packet_fut = receiver.receive();
@@ -121,7 +104,7 @@ async fn send_tun<IO: AsyncRead + Unpin>(
             }
         }
     }
-    Ok(receiver)
+    Ok(())
 }
 
 async fn receive_tun<IO: AsyncWrite + Unpin>(
@@ -129,7 +112,7 @@ async fn receive_tun<IO: AsyncWrite + Unpin>(
     mut tun: ReadHalf<AsyncDevice>,
     mtu: usize,
     mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<TaggedPacketSender<IO>> {
+) -> anyhow::Result<()> {
     let mut buf = vec![0u8; mtu];
     while !*stop_receiver.borrow_and_update() {
         let stop_fut = stop_receiver.changed();
@@ -145,11 +128,12 @@ async fn receive_tun<IO: AsyncWrite + Unpin>(
                 let received = packet_res?;
                 // maybe not?
                 if received == 0 {
-                    return Ok(sender);
+                    return Ok(());
                 }
                 sender.send(&buf[..received]).await?;
             }
         }
     }
-    Ok(sender)
+    sender.into_inner().shutdown().await?;
+    Ok(())
 }

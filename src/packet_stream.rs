@@ -24,10 +24,6 @@ impl<IO: AsyncRead + Unpin> TaggedPacketReceiver<IO> {
 
         Ok(packet)
     }
-
-    pub fn into_inner(self) -> IO {
-        self.stream
-    }
 }
 
 pub struct TaggedPacketSender<IO> {

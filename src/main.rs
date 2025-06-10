@@ -9,7 +9,6 @@ mod packet_stream;
 mod protocol;
 mod routing;
 mod server;
-mod unsplit;
 
 use anyhow::Context;
 use log::error;
