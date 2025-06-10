@@ -96,7 +96,7 @@ impl Router {
             let received = match tun.read(&mut buf).await {
                 Ok(received) => received,
                 Err(e) => {
-                    error!("could not read packet from TUN: {}", e);
+                    error!("could not read packet from TUN: {e}");
                     break;
                 }
             };
@@ -106,7 +106,7 @@ impl Router {
                 RoutingResult::NotIP => warn!("destination IP does not belong to VPN"),
                 RoutingResult::NoIPv4 => warn!("incoming packet without IPv4 destination"),
                 RoutingResult::NoRoute => warn!("no route for incoming packet"),
-                RoutingResult::Error(e) => error!("could not route incoming packet: {}", e),
+                RoutingResult::Error(e) => error!("could not route incoming packet: {e}"),
             }
         }
     }

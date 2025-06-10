@@ -62,14 +62,14 @@ impl Server {
         loop {
             match listener.accept().await {
                 Ok((socket, addr)) => {
-                    info!("incoming connection from {}", addr);
+                    info!("incoming connection from {addr}");
                     tokio::spawn(self.clone().handle_client(socket).map(|res| {
                         if let Err(e) = res {
-                            warn!("{}", e);
+                            warn!("{e}");
                         }
                     }));
                 }
-                Err(e) => error!("could not accept connection: {}", e),
+                Err(e) => error!("could not accept connection: {e}"),
             };
         }
     }
@@ -99,7 +99,7 @@ impl Server {
         let (packet_sender, packet_receiver) = protocol_connection.into_parts();
         ip_lease.set_route(packet_sender).await;
         if let Err(e) = self.clone().forward_packets(packet_receiver).await {
-            info!("connection terminated: {}", e);
+            info!("connection terminated: {e}");
         }
 
         Ok(())

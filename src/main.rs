@@ -1,4 +1,3 @@
-#![feature(addr_parse_ascii)]
 #![feature(ip_from)]
 
 mod client;
@@ -33,7 +32,7 @@ fn main() -> anyhow::Result<()> {
             let stop_sender = client.stop_sender();
             ctrlc::set_handler(move || {
                 if let Err(err) = stop_sender.send(true) {
-                    error!("could not stop: {}", err);
+                    error!("could not stop: {err}");
                 }
             })
             .context("could not set Ctrl-C handler")?;
