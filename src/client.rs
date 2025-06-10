@@ -1,16 +1,18 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{ReadHalf, WriteHalf},
     net::TcpStream,
     sync::watch,
 };
 use tokio_rustls::{rustls, TlsConnector};
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tun::{AbstractDevice, AsyncDevice};
 
 use crate::{
-    common::{full_send, get_root_cert_store},
+    common::get_root_cert_store,
     config::{ClientConfig, TlsConfig},
     packet_stream::{TaggedPacketReceiver, TaggedPacketSender},
     protocol::{Connection, NetworkConfig},
@@ -45,6 +47,8 @@ impl Client {
             .connect(self.socket_address.ip().into(), socket)
             .await?;
         let (client_reader, client_writer) = tokio::io::split(client);
+        let client_reader = client_reader.compat();
+        let client_writer = client_writer.compat_write();
         let mut protocol_connection = Connection::new(client_reader, client_writer);
 
         let network_config = protocol_connection
@@ -56,6 +60,8 @@ impl Client {
         let mtu = device.mtu().unwrap() as usize;
 
         let (tun_reader, tun_writer) = tokio::io::split(device);
+        let tun_reader = tun_reader.compat();
+        let tun_writer = tun_writer.compat_write();
         let (packet_sender, packet_receiver) = protocol_connection.into_parts();
 
         let send_fut = send_tun(packet_receiver, tun_writer, self.stop_receiver.clone());
@@ -85,7 +91,7 @@ fn configure_tun(network_config: NetworkConfig) -> tun::Configuration {
 
 async fn send_tun<IO: AsyncRead + Unpin>(
     mut receiver: TaggedPacketReceiver<IO>,
-    mut tun: WriteHalf<AsyncDevice>,
+    mut tun: Compat<WriteHalf<AsyncDevice>>,
     mut stop_receiver: watch::Receiver<bool>,
 ) -> anyhow::Result<()> {
     while !*stop_receiver.borrow_and_update() {
@@ -100,7 +106,8 @@ async fn send_tun<IO: AsyncRead + Unpin>(
             }
             packet_res = packet_fut => {
                 let packet = packet_res?;
-                full_send(&mut tun, &packet).await?;
+                tun.write_all(&packet).await?;
+                tun.flush().await?;
             }
         }
     }
@@ -109,7 +116,7 @@ async fn send_tun<IO: AsyncRead + Unpin>(
 
 async fn receive_tun<IO: AsyncWrite + Unpin>(
     mut sender: TaggedPacketSender<IO>,
-    mut tun: ReadHalf<AsyncDevice>,
+    mut tun: Compat<ReadHalf<AsyncDevice>>,
     mtu: usize,
     mut stop_receiver: watch::Receiver<bool>,
 ) -> anyhow::Result<()> {
@@ -134,6 +141,6 @@ async fn receive_tun<IO: AsyncWrite + Unpin>(
             }
         }
     }
-    sender.into_inner().shutdown().await?;
+    sender.into_inner().close().await?;
     Ok(())
 }

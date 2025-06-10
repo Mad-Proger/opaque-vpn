@@ -1,4 +1,5 @@
-use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use crate::common::{AsyncReadFixed, AsyncWriteFixed};
+use futures::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub struct TaggedPacketReceiver<IO> {
     stream: IO,

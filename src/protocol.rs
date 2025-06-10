@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use anyhow::Context;
-use tokio::io::{AsyncRead, AsyncWrite};
+use futures::io::{AsyncRead, AsyncWrite};
 
 use crate::packet_stream::{TaggedPacketReceiver, TaggedPacketSender};
 

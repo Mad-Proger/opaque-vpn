@@ -13,11 +13,14 @@ use tokio::{
     sync::{Mutex, RwLock},
 };
 use tokio_rustls::server::TlsStream;
+use tokio_util::compat::Compat;
 use tun::AsyncDevice;
 
 use crate::{ip_manager::IpManager, packet_stream::TaggedPacketSender};
 
-type PacketSink = TaggedPacketSender<WriteHalf<TlsStream<TcpStream>>>;
+// this is horrible
+// TODO: replace with some generic shit
+type PacketSink = TaggedPacketSender<Compat<WriteHalf<TlsStream<TcpStream>>>>;
 
 pub struct Router {
     ip_manager: Mutex<IpManager>,
