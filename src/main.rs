@@ -13,9 +13,11 @@ use anyhow::Context;
 use log::error;
 use tokio::runtime::Builder;
 
-use client::Client;
-use config::{load_config, Mode};
-use server::Server;
+use crate::{
+    client::Client,
+    config::{load_config, Mode},
+    server::Server,
+};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
