@@ -3,7 +3,9 @@ use std::net::Ipv4Addr;
 use anyhow::Context;
 use futures::io::{AsyncRead, AsyncWrite};
 
-use crate::packet_stream::{TaggedPacketReceiver, TaggedPacketSender};
+use crate::packet_stream::{
+    PacketReceiver, PacketSender, TaggedPacketReceiver, TaggedPacketSender,
+};
 
 pub struct NetworkConfig {
     pub client_ip: Ipv4Addr,

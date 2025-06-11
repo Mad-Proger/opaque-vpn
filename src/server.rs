@@ -17,7 +17,7 @@ use tun::{AbstractDevice, AsyncDevice};
 use crate::{
     common::get_root_cert_store,
     config::{ServerConfig, TlsConfig},
-    packet_stream::TaggedPacketReceiver,
+    packet_stream::{PacketReceiver, TaggedPacketReceiver},
     protocol::{Connection, NetworkConfig},
     routing::{Router, RouterConfig},
 };

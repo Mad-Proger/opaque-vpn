@@ -16,7 +16,10 @@ use tokio_rustls::server::TlsStream;
 use tokio_util::compat::Compat;
 use tun::AsyncDevice;
 
-use crate::{ip_manager::IpManager, packet_stream::TaggedPacketSender};
+use crate::{
+    ip_manager::IpManager,
+    packet_stream::{PacketSender, TaggedPacketSender},
+};
 
 // this is horrible
 // TODO: replace with some generic shit
