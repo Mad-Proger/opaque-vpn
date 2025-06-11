@@ -17,13 +17,13 @@ use tun::{AbstractDevice, AsyncDevice};
 use crate::{
     common::get_root_cert_store,
     config::{ServerConfig, TlsConfig},
-    packet_stream::{PacketReceiver, TaggedPacketReceiver},
+    packet_stream::{PacketReceiver, TaggedPacketReceiver, TunReceiver, TunSender},
     protocol::{Connection, NetworkConfig},
     routing::{Router, RouterConfig},
 };
 
 pub struct Server {
-    router: Arc<Router>,
+    router: Arc<Router<TunSender>>,
     acceptor: TlsAcceptor,
     socket_address: SocketAddr,
     gateway: Ipv4Addr,
@@ -35,13 +35,18 @@ impl Server {
     pub fn try_new(config: ServerConfig, tls: TlsConfig) -> anyhow::Result<Arc<Self>> {
         let device = tun_create(&config)?;
         let mtu = device.mtu().context("could not get MTU")?;
+
+        let (tun_writer, tun_reader) = device.split().context("could not split tun device")?;
+        let tun_sender: TunSender = tun_writer.into();
+        let tun_receiver = TunReceiver::new(tun_reader, mtu as usize);
+
         let router = Router::new(
             RouterConfig {
                 address: config.virtual_address,
                 netmask: config.subnet_mask,
-                mtu,
             },
-            device,
+            tun_sender,
+            tun_receiver,
         );
 
         Ok(Self {
@@ -105,7 +110,7 @@ impl Server {
         Ok(())
     }
 
-    async fn forward_packets<IO: AsyncRead + Unpin>(
+    async fn forward_packets<IO: AsyncRead + Unpin + Send>(
         self: Arc<Self>,
         mut packet_receiver: TaggedPacketReceiver<IO>,
     ) -> anyhow::Result<()> {

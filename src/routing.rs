@@ -4,41 +4,38 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::ensure;
 use etherparse::IpSlice;
 use log::{error, warn};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::WriteHalf,
     net::TcpStream,
     sync::{Mutex, RwLock},
 };
 use tokio_rustls::server::TlsStream;
 use tokio_util::compat::Compat;
-use tun::AsyncDevice;
 
 use crate::{
     ip_manager::IpManager,
-    packet_stream::{PacketSender, TaggedPacketSender},
+    packet_stream::{PacketReceiver, PacketSender, TaggedPacketSender},
 };
 
 // this is horrible
 // TODO: replace with some generic shit
 type PacketSink = TaggedPacketSender<Compat<WriteHalf<TlsStream<TcpStream>>>>;
 
-pub struct Router {
+pub struct Router<S: PacketSender> {
     ip_manager: Mutex<IpManager>,
     routes: RwLock<HashMap<Ipv4Addr, Mutex<PacketSink>>>,
-    tun_writer: Mutex<WriteHalf<AsyncDevice>>,
+    tun_writer: Mutex<S>,
 }
 
 pub struct RouterConfig {
     pub address: Ipv4Addr,
     pub netmask: Ipv4Addr,
-    pub mtu: u16,
 }
 
-pub struct IpLease {
-    router: Arc<Router>,
+pub struct IpLease<S: PacketSender + 'static> {
+    router: Arc<Router<S>>,
     addr: Ipv4Addr,
 }
 
@@ -50,19 +47,22 @@ enum RoutingResult {
     Error(anyhow::Error),
 }
 
-impl Router {
-    pub fn new(config: RouterConfig, tun: AsyncDevice) -> Arc<Self> {
+impl<S: PacketSender + 'static> Router<S> {
+    pub fn new<R: PacketReceiver + 'static>(
+        config: RouterConfig,
+        tun_sender: S,
+        tun_receiver: R,
+    ) -> Arc<Self> {
         let mut ip_manager = IpManager::new(config.address, config.netmask);
         ip_manager.block(config.address);
 
-        let (tun_reader, tun_writer) = tokio::io::split(tun);
         let router = Arc::new(Self {
             ip_manager: ip_manager.into(),
             routes: HashMap::new().into(),
-            tun_writer: tun_writer.into(),
+            tun_writer: tun_sender.into(),
         });
 
-        tokio::spawn(router.clone().route_incoming(tun_reader, config.mtu));
+        tokio::spawn(router.clone().route_incoming(tun_receiver));
         router
     }
 
@@ -74,17 +74,11 @@ impl Router {
         };
 
         let mut lock = self.tun_writer.lock().await;
-        let mut offset = 0;
-        while offset < packet.len() {
-            let sent = lock.write(&packet[offset..]).await?;
-            ensure!(sent > 0, "could not write data to TUN interface");
-            offset += sent;
-        }
-
+        lock.send(&packet).await?;
         Ok(())
     }
 
-    pub async fn get_ip(self: Arc<Self>) -> Option<IpLease> {
+    pub async fn get_ip(self: Arc<Self>) -> Option<IpLease<S>> {
         let mut lock = self.ip_manager.lock().await;
         lock.get_free().map(|ip| {
             lock.block(ip);
@@ -95,19 +89,17 @@ impl Router {
         })
     }
 
-    async fn route_incoming(self: Arc<Self>, mut tun: ReadHalf<AsyncDevice>, mtu: u16) {
-        let mut buf = vec![0u8; mtu as usize].into_boxed_slice();
-
+    async fn route_incoming<R: PacketReceiver>(self: Arc<Self>, mut tun_receiver: R) {
         loop {
-            let received = match tun.read(&mut buf).await {
-                Ok(received) => received,
+            let packet = match tun_receiver.receive().await {
+                Ok(packet) => packet,
                 Err(e) => {
-                    error!("could not read packet from TUN: {e}");
-                    break;
+                    error!("could not read packet from tun: {e}");
+                    continue;
                 }
             };
 
-            match self.route_local(&buf[..received]).await {
+            match self.route_local(&packet).await {
                 RoutingResult::Ok => {}
                 RoutingResult::NotIP => warn!("destination IP does not belong to VPN"),
                 RoutingResult::NoIPv4 => warn!("incoming packet without IPv4 destination"),
@@ -135,7 +127,7 @@ impl Router {
     }
 }
 
-impl IpLease {
+impl<S: PacketSender + 'static> IpLease<S> {
     pub fn get_address(&self) -> Ipv4Addr {
         self.addr
     }
@@ -150,7 +142,7 @@ impl IpLease {
     }
 }
 
-impl Drop for IpLease {
+impl<S: PacketSender + 'static> Drop for IpLease<S> {
     fn drop(&mut self) {
         let addr = self.addr;
         let router = self.router.clone();

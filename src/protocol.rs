@@ -52,15 +52,15 @@ impl TryFrom<&[u8]> for NetworkConfig {
     }
 }
 
-pub struct Connection<Reader, Writer> {
+pub struct Connection<Reader: Send, Writer: Send> {
     receiver: TaggedPacketReceiver<Reader>,
     sender: TaggedPacketSender<Writer>,
 }
 
 impl<Reader, Writer> Connection<Reader, Writer>
 where
-    Reader: AsyncRead + Unpin,
-    Writer: AsyncWrite + Unpin,
+    Reader: AsyncRead + Unpin + Send,
+    Writer: AsyncWrite + Unpin + Send,
 {
     pub fn new(reader: Reader, writer: Writer) -> Self {
         Self {
