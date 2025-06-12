@@ -1,4 +1,5 @@
-use crate::common::{AsyncReadFixed, AsyncWriteFixed};
+use std::pin::Pin;
+
 use futures::{
     future::Future,
     io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -6,17 +7,19 @@ use futures::{
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 use tun::{DeviceReader, DeviceWriter};
 
+use crate::common::{AsyncReadFixed, AsyncWriteFixed};
+
 pub trait PacketReceiver: Send {
     fn receive(&mut self) -> impl Future<Output = io::Result<Box<[u8]>>> + Send;
 }
 
 pub trait DynPacketReceiver: Send {
-    fn receive_dyn(&mut self) -> Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>;
+    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>>;
 }
 
 impl<R: PacketReceiver> DynPacketReceiver for R {
-    fn receive_dyn(&mut self) -> Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_> {
-        Box::new(self.receive())
+    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>> {
+        Box::pin(self.receive())
     }
 }
 
@@ -82,21 +85,21 @@ pub trait DynPacketSender: Send {
     fn send_dyn<'a>(
         &'a mut self,
         packet: &'a [u8],
-    ) -> Box<dyn Future<Output = io::Result<()>> + 'a>;
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + 'a>>;
 
-    fn close_dyn(&mut self) -> Box<dyn Future<Output = io::Result<()>> + '_>;
+    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + '_>>;
 }
 
 impl<S: PacketSender> DynPacketSender for S {
     fn send_dyn<'a>(
         &'a mut self,
         packet: &'a [u8],
-    ) -> Box<dyn Future<Output = io::Result<()>> + 'a> {
-        Box::new(self.send(packet))
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + 'a>> {
+        Box::pin(self.send(packet))
     }
 
-    fn close_dyn(&mut self) -> Box<dyn Future<Output = io::Result<()>> + '_> {
-        Box::new(self.close())
+    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + '_>> {
+        Box::pin(self.close())
     }
 }
 
