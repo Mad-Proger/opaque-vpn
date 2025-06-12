@@ -11,7 +11,6 @@ use tokio_rustls::{
     rustls::{self, server::WebPkiClientVerifier},
     TlsAcceptor,
 };
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tun::{AbstractDevice, AsyncDevice};
 
 use crate::{
@@ -79,10 +78,7 @@ impl Server {
 
     async fn handle_client(self: Arc<Self>, socket: TcpStream) -> anyhow::Result<()> {
         let client = self.acceptor.accept(socket).await?;
-        let (client_reader, client_writer) = tokio::io::split(client);
-        let client_reader = client_reader.compat();
-        let client_writer = client_writer.compat_write();
-        let mut protocol_connection = Connection::new(client_reader, client_writer);
+        let mut protocol_connection = Connection::new(client);
 
         let ip_lease = self
             .router

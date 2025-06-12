@@ -4,7 +4,6 @@ use anyhow::Context;
 use futures::io;
 use tokio::{net::TcpStream, sync::watch};
 use tokio_rustls::{rustls, TlsConnector};
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tun::AbstractDevice;
 
 use crate::{
@@ -42,10 +41,7 @@ impl Client {
             .connector
             .connect(self.socket_address.ip().into(), socket)
             .await?;
-        let (client_reader, client_writer) = tokio::io::split(client);
-        let client_reader = client_reader.compat();
-        let client_writer = client_writer.compat_write();
-        let mut protocol_connection = Connection::new(client_reader, client_writer);
+        let mut protocol_connection = Connection::new(client);
 
         let network_config = protocol_connection
             .receive_config()
