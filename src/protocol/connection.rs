@@ -1,4 +1,5 @@
 use futures::TryFutureExt;
+use obfswire::{Config, ObfuscatedStream, SharedKey};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_rustls::{client, rustls::pki_types::ServerName, server, TlsAcceptor, TlsConnector};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
@@ -34,6 +35,34 @@ where
         acceptor: &TlsAcceptor,
     ) -> std::io::Result<Connection<server::TlsStream<Stream>>> {
         acceptor.accept(self.0).map_ok(Connection::new).await
+    }
+
+    pub async fn start_obfs_server(
+        mut self,
+    ) -> std::io::Result<Connection<ObfuscatedStream<Stream>>> {
+        let key = SharedKey::from_entropy();
+        self.0.write_all(key.as_bytes()).await?;
+        let config = Config::builder_with_shared_key(key)
+            .with_default_cipher()
+            .no_padding();
+        Ok(Connection::new(ObfuscatedStream::with_config_in(
+            config, self.0,
+        )))
+    }
+
+    pub async fn start_obfs_client(
+        mut self,
+    ) -> std::io::Result<Connection<ObfuscatedStream<Stream>>> {
+        // TODO: share key in a safe manner
+        let mut key_bytes = [0u8; 32];
+        self.0.read_exact(&mut key_bytes).await?;
+        let key = SharedKey::from(key_bytes);
+        let config = Config::builder_with_shared_key(key)
+            .with_default_cipher()
+            .no_padding();
+        Ok(Connection::new(ObfuscatedStream::with_config_in(
+            config, self.0,
+        )))
     }
 
     pub async fn send_config(&mut self, config: NetworkConfig) -> std::io::Result<()> {

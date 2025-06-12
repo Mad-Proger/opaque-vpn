@@ -42,6 +42,7 @@ impl Client {
         let domain: ServerName = self.socket_address.ip().into();
         let mut protocol_connection = TcpStream::connect(self.socket_address)
             .map_ok(Connection::new)
+            .and_then(Connection::start_obfs_client)
             .and_then(|connection| connection.connect_tls(&self.connector, domain))
             .await?;
 
