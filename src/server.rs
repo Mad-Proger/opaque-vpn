@@ -77,8 +77,7 @@ impl Server {
     }
 
     async fn handle_client(self: Arc<Self>, socket: TcpStream) -> anyhow::Result<()> {
-        let client = self.acceptor.accept(socket).await?;
-        let mut protocol_connection = Connection::new(client);
+        let mut protocol_connection = Connection::new(socket).accept_tls(&self.acceptor).await?;
 
         let ip_lease = self
             .router

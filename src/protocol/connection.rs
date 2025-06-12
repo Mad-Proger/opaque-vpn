@@ -1,4 +1,6 @@
+use futures::TryFutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_rustls::{client, rustls::pki_types::ServerName, server, TlsAcceptor, TlsConnector};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
@@ -14,6 +16,24 @@ where
 {
     pub fn new(stream: Stream) -> Self {
         Self(stream)
+    }
+
+    pub async fn connect_tls(
+        self,
+        connector: &TlsConnector,
+        domain: ServerName<'static>,
+    ) -> std::io::Result<Connection<client::TlsStream<Stream>>> {
+        connector
+            .connect(domain, self.0)
+            .map_ok(Connection::new)
+            .await
+    }
+
+    pub async fn accept_tls(
+        self,
+        acceptor: &TlsAcceptor,
+    ) -> std::io::Result<Connection<server::TlsStream<Stream>>> {
+        acceptor.accept(self.0).map_ok(Connection::new).await
     }
 
     pub async fn send_config(&mut self, config: NetworkConfig) -> std::io::Result<()> {
