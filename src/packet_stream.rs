@@ -10,6 +10,16 @@ pub trait PacketReceiver: Send {
     fn receive(&mut self) -> impl Future<Output = io::Result<Box<[u8]>>> + Send;
 }
 
+pub trait DynPacketReceiver: Send {
+    fn receive_dyn(&mut self) -> Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>;
+}
+
+impl<R: PacketReceiver> DynPacketReceiver for R {
+    fn receive_dyn(&mut self) -> Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_> {
+        Box::new(self.receive())
+    }
+}
+
 pub struct TaggedPacketReceiver<IO: Send> {
     stream: IO,
 }
@@ -66,6 +76,28 @@ pub trait PacketSender: Send {
     async fn send(&mut self, packet: &[u8]) -> io::Result<()>;
 
     async fn close(&mut self) -> io::Result<()>;
+}
+
+pub trait DynPacketSender: Send {
+    fn send_dyn<'a>(
+        &'a mut self,
+        packet: &'a [u8],
+    ) -> Box<dyn Future<Output = io::Result<()>> + 'a>;
+
+    fn close_dyn(&mut self) -> Box<dyn Future<Output = io::Result<()>> + '_>;
+}
+
+impl<S: PacketSender> DynPacketSender for S {
+    fn send_dyn<'a>(
+        &'a mut self,
+        packet: &'a [u8],
+    ) -> Box<dyn Future<Output = io::Result<()>> + 'a> {
+        Box::new(self.send(packet))
+    }
+
+    fn close_dyn(&mut self) -> Box<dyn Future<Output = io::Result<()>> + '_> {
+        Box::new(self.close())
+    }
 }
 
 pub struct TaggedPacketSender<IO> {
