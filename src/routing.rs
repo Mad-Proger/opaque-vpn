@@ -6,22 +6,14 @@ use std::{
 
 use etherparse::IpSlice;
 use log::{error, warn};
-use tokio::{
-    io::WriteHalf,
-    net::TcpStream,
-    sync::{Mutex, RwLock},
-};
-use tokio_rustls::server::TlsStream;
-use tokio_util::compat::Compat;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     ip_manager::IpManager,
-    packet_stream::{PacketReceiver, PacketSender, TaggedPacketSender},
+    packet_stream::{DynPacketSender, PacketReceiver, PacketSender},
 };
 
-// this is horrible
-// TODO: replace with some generic shit
-type PacketSink = TaggedPacketSender<Compat<WriteHalf<TlsStream<TcpStream>>>>;
+type PacketSink = Box<dyn DynPacketSender>;
 
 pub struct Router<S: PacketSender> {
     ip_manager: Mutex<IpManager>,
@@ -120,7 +112,7 @@ impl<S: PacketSender + 'static> Router<S> {
         let Some(route) = routes.get(&destination) else {
             return RoutingResult::NoRoute;
         };
-        if let Err(err) = route.lock().await.send(packet).await {
+        if let Err(err) = route.lock().await.send_dyn(packet).await {
             return RoutingResult::Error(err.into());
         }
         RoutingResult::Ok
@@ -132,13 +124,14 @@ impl<S: PacketSender + 'static> IpLease<S> {
         self.addr
     }
 
-    pub async fn set_route(&self, route: PacketSink) {
+    pub async fn set_route<Sink: DynPacketSender + 'static>(&self, route: Sink) {
+        let boxed: Box<dyn DynPacketSender> = Box::new(route);
         _ = self
             .router
             .routes
             .write()
             .await
-            .insert(self.addr, route.into());
+            .insert(self.addr, boxed.into());
     }
 }
 
@@ -147,7 +140,12 @@ impl<S: PacketSender + 'static> Drop for IpLease<S> {
         let addr = self.addr;
         let router = self.router.clone();
         tokio::spawn(async move {
-            router.routes.write().await.remove(&addr);
+            let route = router.routes.write().await.remove(&addr);
+            if let Some(sink) = route {
+                if let Err(e) = sink.lock().await.close_dyn().await {
+                    warn!("could not close stream to {addr}: {e}");
+                }
+            }
             router.ip_manager.lock().await.release(addr);
         });
     }
