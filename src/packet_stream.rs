@@ -13,6 +13,8 @@ pub trait PacketReceiver: Send {
     fn receive(&mut self) -> impl Future<Output = io::Result<Box<[u8]>>> + Send;
 }
 
+// unused now, but may be useful later
+#[allow(dead_code)]
 pub trait DynPacketReceiver: Send {
     fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + Send + '_>>;
 }
