@@ -14,11 +14,11 @@ pub trait PacketReceiver: Send {
 }
 
 pub trait DynPacketReceiver: Send {
-    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>>;
+    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + Send + '_>>;
 }
 
 impl<R: PacketReceiver> DynPacketReceiver for R {
-    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + '_>> {
+    fn receive_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<Box<[u8]>>> + Send + '_>> {
         Box::pin(self.receive())
     }
 }
@@ -76,29 +76,29 @@ impl PacketReceiver for TunReceiver {
 }
 
 pub trait PacketSender: Send {
-    async fn send(&mut self, packet: &[u8]) -> io::Result<()>;
+    fn send(&mut self, packet: &[u8]) -> impl Future<Output = io::Result<()>> + Send;
 
-    async fn close(&mut self) -> io::Result<()>;
+    fn close(&mut self) -> impl Future<Output = io::Result<()>> + Send;
 }
 
 pub trait DynPacketSender: Send {
     fn send_dyn<'a>(
         &'a mut self,
         packet: &'a [u8],
-    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>>;
 
-    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + '_>>;
+    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>>;
 }
 
 impl<S: PacketSender> DynPacketSender for S {
     fn send_dyn<'a>(
         &'a mut self,
         packet: &'a [u8],
-    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
         Box::pin(self.send(packet))
     }
 
-    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + '_>> {
+    fn close_dyn(&mut self) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         Box::pin(self.close())
     }
 }
