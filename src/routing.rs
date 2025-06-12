@@ -124,14 +124,14 @@ impl<S: PacketSender + 'static> IpLease<S> {
         self.addr
     }
 
-    pub async fn set_route<Sink: DynPacketSender + 'static>(&self, route: Sink) {
-        let boxed: Box<dyn DynPacketSender> = Box::new(route);
+    pub async fn set_route<Sink: PacketSender + 'static>(&self, route: Sink) {
+        let sink: PacketSink = Box::new(route);
         _ = self
             .router
             .routes
             .write()
             .await
-            .insert(self.addr, boxed.into());
+            .insert(self.addr, sink.into());
     }
 }
 
