@@ -1,11 +1,12 @@
-use anyhow::{bail, ensure, Context};
-use serde::Deserialize;
 use std::{
     fs::File,
     io::Read,
     net::{Ipv4Addr, SocketAddr, ToSocketAddrs},
     path::Path,
 };
+
+use anyhow::{bail, ensure, Context};
+use serde::Deserialize;
 use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 
 pub struct ClientConfig {

@@ -1,28 +1,29 @@
-use crate::{
-    common::{get_root_cert_store, CONFIGURATION_SIZE},
-    config::{ServerConfig, TlsConfig},
-    packet_stream::{PacketReceiver, PacketSender},
-    routing::{Router, RouterConfig},
-};
-use anyhow::Context;
-use futures::FutureExt;
-use log::{error, info, warn};
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
 };
-use tokio::{
-    io::AsyncRead,
-    net::{TcpListener, TcpStream},
-};
+
+use anyhow::Context;
+use futures::{io::AsyncRead, FutureExt};
+use log::{error, info, warn};
+use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{
     rustls::{self, server::WebPkiClientVerifier},
     TlsAcceptor,
 };
+use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tun::{AbstractDevice, AsyncDevice};
 
+use crate::{
+    common::get_root_cert_store,
+    config::{ServerConfig, TlsConfig},
+    packet_stream::{PacketReceiver, TaggedPacketReceiver, TunReceiver, TunSender},
+    protocol::{Connection, NetworkConfig},
+    routing::{Router, RouterConfig},
+};
+
 pub struct Server {
-    router: Arc<Router>,
+    router: Arc<Router<TunSender>>,
     acceptor: TlsAcceptor,
     socket_address: SocketAddr,
     gateway: Ipv4Addr,
@@ -34,13 +35,18 @@ impl Server {
     pub fn try_new(config: ServerConfig, tls: TlsConfig) -> anyhow::Result<Arc<Self>> {
         let device = tun_create(&config)?;
         let mtu = device.mtu().context("could not get MTU")?;
+
+        let (tun_writer, tun_reader) = device.split().context("could not split tun device")?;
+        let tun_sender: TunSender = tun_writer.into();
+        let tun_receiver = TunReceiver::new(tun_reader, mtu as usize);
+
         let router = Router::new(
             RouterConfig {
                 address: config.virtual_address,
                 netmask: config.subnet_mask,
-                mtu,
             },
-            device,
+            tun_sender,
+            tun_receiver,
         );
 
         Ok(Self {
@@ -59,14 +65,14 @@ impl Server {
         loop {
             match listener.accept().await {
                 Ok((socket, addr)) => {
-                    info!("incoming connection from {}", addr);
+                    info!("incoming connection from {addr}");
                     tokio::spawn(self.clone().handle_client(socket).map(|res| {
                         if let Err(e) = res {
-                            warn!("{}", e);
+                            warn!("{e}");
                         }
                     }));
                 }
-                Err(e) => error!("could not accept connection: {}", e),
+                Err(e) => error!("could not accept connection: {e}"),
             };
         }
     }
@@ -74,8 +80,9 @@ impl Server {
     async fn handle_client(self: Arc<Self>, socket: TcpStream) -> anyhow::Result<()> {
         let client = self.acceptor.accept(socket).await?;
         let (client_reader, client_writer) = tokio::io::split(client);
-        let packet_receiver = PacketReceiver::new(client_reader);
-        let mut packet_sender = PacketSender::new(client_writer);
+        let client_reader = client_reader.compat();
+        let client_writer = client_writer.compat_write();
+        let mut protocol_connection = Connection::new(client_reader, client_writer);
 
         let ip_lease = self
             .router
@@ -84,28 +91,28 @@ impl Server {
             .await
             .context("could not assign ip address")?;
 
-        let ip = ip_lease.get_address();
-        let mut network_info = [0u8; CONFIGURATION_SIZE];
-        network_info[..4].copy_from_slice(&ip.octets());
-        network_info[4..8].copy_from_slice(&self.gateway.octets());
-        network_info[8..12].copy_from_slice(&self.netmask.octets());
-        network_info[12..].copy_from_slice(&self.mtu.to_le_bytes());
-        packet_sender
-            .send(&network_info)
+        protocol_connection
+            .send_config(NetworkConfig {
+                client_ip: ip_lease.get_address(),
+                server_ip: self.gateway,
+                netmask: self.netmask,
+                mtu: self.mtu,
+            })
             .await
             .context("could not send network configuration")?;
 
+        let (packet_sender, packet_receiver) = protocol_connection.into_parts();
         ip_lease.set_route(packet_sender).await;
         if let Err(e) = self.clone().forward_packets(packet_receiver).await {
-            info!("connection terminated: {}", e);
+            info!("connection terminated: {e}");
         }
 
         Ok(())
     }
 
-    async fn forward_packets<IO: AsyncRead + Unpin>(
+    async fn forward_packets<IO: AsyncRead + Unpin + Send>(
         self: Arc<Self>,
-        mut packet_receiver: PacketReceiver<IO>,
+        mut packet_receiver: TaggedPacketReceiver<IO>,
     ) -> anyhow::Result<()> {
         loop {
             let packet = packet_receiver.receive().await?;

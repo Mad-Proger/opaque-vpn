@@ -1,22 +1,18 @@
-use crate::{
-    common::{full_send, get_root_cert_store, CONFIGURATION_SIZE},
-    config::{ClientConfig, TlsConfig},
-    packet_stream::{PacketReceiver, PacketSender},
-    unsplit::Unsplit,
-};
-use anyhow::{ensure, Context};
-use log::error;
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    sync::Arc,
-};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
-    net::TcpStream,
-    sync::watch,
-};
+use std::{net::SocketAddr, sync::Arc};
+
+use anyhow::Context;
+use futures::io;
+use tokio::{net::TcpStream, sync::watch};
 use tokio_rustls::{rustls, TlsConnector};
-use tun::{AbstractDevice, AsyncDevice};
+use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
+use tun::AbstractDevice;
+
+use crate::{
+    common::get_root_cert_store,
+    config::{ClientConfig, TlsConfig},
+    packet_stream::{PacketReceiver, PacketSender, TunReceiver, TunSender},
+    protocol::{Connection, NetworkConfig},
+};
 
 pub struct Client {
     connector: TlsConnector,
@@ -47,32 +43,26 @@ impl Client {
             .connect(self.socket_address.ip().into(), socket)
             .await?;
         let (client_reader, client_writer) = tokio::io::split(client);
-        let mut packet_receiver = PacketReceiver::new(client_reader);
-        let packet_sender = PacketSender::new(client_writer);
+        let client_reader = client_reader.compat();
+        let client_writer = client_writer.compat_write();
+        let mut protocol_connection = Connection::new(client_reader, client_writer);
 
-        let tun_config = configure_tun(&mut packet_receiver).await?;
+        let network_config = protocol_connection
+            .receive_config()
+            .await
+            .context("could not receive network config")?;
+        let tun_config = configure_tun(network_config);
         let device = tun::create_as_async(&tun_config)?;
         let mtu = device.mtu().unwrap() as usize;
-        let (tun_reader, tun_writer) = tokio::io::split(device);
 
-        let send_fut = send_tun(packet_receiver, tun_writer, self.stop_receiver.clone());
-        let receive_fut = receive_tun(packet_sender, tun_reader, mtu, self.stop_receiver.clone());
-        let (res_send, res_receive) = tokio::join!(send_fut, receive_fut);
+        let (tun_writer, tun_reader) = device.split()?;
+        let tun_receiver = TunReceiver::new(tun_reader, mtu);
+        let tun_sender: TunSender = tun_writer.into();
+        let (packet_sender, packet_receiver) = protocol_connection.into_parts();
 
-        let mut unsplitter = Unsplit::new();
-        if let Err(e) =
-            res_send.and_then(|read_half| Ok(unsplitter.save_read_half(read_half.into_inner())?))
-        {
-            error!("{}", e);
-        }
-        if let Err(e) = res_receive
-            .and_then(|write_half| Ok(unsplitter.save_write_half(write_half.into_inner())?))
-        {
-            error!("{}", e);
-        }
-        if let Some(mut stream) = unsplitter.unsplit() {
-            stream.shutdown().await?;
-        }
+        let send_fut = forward_packets(packet_receiver, tun_sender, self.stop_receiver.clone());
+        let receive_fut = forward_packets(tun_receiver, packet_sender, self.stop_receiver.clone());
+        tokio::try_join!(send_fut, receive_fut)?;
 
         Ok(())
     }
@@ -84,40 +74,24 @@ fn configure_tls(tls: TlsConfig) -> anyhow::Result<rustls::ClientConfig> {
         .with_client_auth_cert(vec![tls.certificate, tls.root_certificate], tls.key)?)
 }
 
-async fn configure_tun<IO: AsyncRead + Unpin>(
-    receiver: &mut PacketReceiver<IO>,
-) -> anyhow::Result<tun::Configuration> {
-    let config = receiver
-        .receive()
-        .await
-        .context("could not receive configuration")?;
-    ensure!(
-        config.len() == CONFIGURATION_SIZE,
-        "invalid configuration format received"
-    );
-
-    let ip = Ipv4Addr::from_octets(config[..4].try_into().unwrap());
-    let gateway = Ipv4Addr::from_octets(config[4..8].try_into().unwrap());
-    let netmask = Ipv4Addr::from_octets(config[8..12].try_into().unwrap());
-    let mtu = u16::from_le_bytes(config[12..].try_into().unwrap());
-
+fn configure_tun(network_config: NetworkConfig) -> tun::Configuration {
     let mut config = tun::configure();
     config
-        .address(ip)
-        .destination(gateway)
-        .netmask(netmask)
-        .mtu(mtu)
+        .address(network_config.client_ip)
+        .destination(network_config.server_ip)
+        .netmask(network_config.netmask)
+        .mtu(network_config.mtu)
         .up();
-    Ok(config)
+    config
 }
 
-async fn send_tun<IO: AsyncRead + Unpin>(
-    mut receiver: PacketReceiver<IO>,
-    mut tun: WriteHalf<AsyncDevice>,
-    mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<PacketReceiver<IO>> {
-    while !*stop_receiver.borrow_and_update() {
-        let stop_fut = stop_receiver.changed();
+async fn forward_packets<R: PacketReceiver, S: PacketSender>(
+    mut receiver: R,
+    mut sender: S,
+    mut stop_token: watch::Receiver<bool>,
+) -> io::Result<()> {
+    while !*stop_token.borrow_and_update() {
+        let stop_fut = stop_token.changed();
         let packet_fut = receiver.receive();
         tokio::select! {
             res = stop_fut => {
@@ -128,39 +102,9 @@ async fn send_tun<IO: AsyncRead + Unpin>(
             }
             packet_res = packet_fut => {
                 let packet = packet_res?;
-                full_send(&mut tun, &packet).await?;
+                sender.send(&packet).await?;
             }
         }
     }
-    Ok(receiver)
-}
-
-async fn receive_tun<IO: AsyncWrite + Unpin>(
-    mut sender: PacketSender<IO>,
-    mut tun: ReadHalf<AsyncDevice>,
-    mtu: usize,
-    mut stop_receiver: watch::Receiver<bool>,
-) -> anyhow::Result<PacketSender<IO>> {
-    let mut buf = vec![0u8; mtu];
-    while !*stop_receiver.borrow_and_update() {
-        let stop_fut = stop_receiver.changed();
-        let read_fut = tun.read(buf.as_mut_slice());
-        tokio::select! {
-            res = stop_fut => {
-                if res.is_err() {
-                    break;
-                }
-                continue;
-            }
-            packet_res = read_fut => {
-                let received = packet_res?;
-                // maybe not?
-                if received == 0 {
-                    return Ok(sender);
-                }
-                sender.send(&buf[..received]).await?;
-            }
-        }
-    }
-    Ok(sender)
+    sender.close().await
 }

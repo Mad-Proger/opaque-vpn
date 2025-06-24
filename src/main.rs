@@ -1,4 +1,3 @@
-#![feature(addr_parse_ascii)]
 #![feature(ip_from)]
 
 mod client;
@@ -6,16 +5,19 @@ mod common;
 mod config;
 mod ip_manager;
 mod packet_stream;
+mod protocol;
 mod routing;
 mod server;
-mod unsplit;
 
 use anyhow::Context;
-use client::Client;
-use config::{load_config, Mode};
 use log::error;
-use server::Server;
 use tokio::runtime::Builder;
+
+use crate::{
+    client::Client,
+    config::{load_config, Mode},
+    server::Server,
+};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -32,7 +34,7 @@ fn main() -> anyhow::Result<()> {
             let stop_sender = client.stop_sender();
             ctrlc::set_handler(move || {
                 if let Err(err) = stop_sender.send(true) {
-                    error!("could not stop: {}", err);
+                    error!("could not stop: {err}");
                 }
             })
             .context("could not set Ctrl-C handler")?;
