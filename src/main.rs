@@ -25,6 +25,7 @@ fn main() -> anyhow::Result<()> {
     let config = load_config(std::env::args().nth(1).context("no config file provided")?)?;
     let runtime = Builder::new_current_thread()
         .enable_io()
+        .enable_time()
         .build()
         .context("could not create runtime")?;
 

@@ -1,10 +1,12 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
-use futures::io;
+use futures::{io, TryFutureExt};
 use tokio::{net::TcpStream, sync::watch};
-use tokio_rustls::{rustls, TlsConnector};
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
+use tokio_rustls::{
+    rustls::{self, pki_types::ServerName},
+    TlsConnector,
+};
 use tun::AbstractDevice;
 
 use crate::{
@@ -37,15 +39,12 @@ impl Client {
     }
 
     pub async fn run(self) -> anyhow::Result<()> {
-        let socket = TcpStream::connect(self.socket_address).await?;
-        let client = self
-            .connector
-            .connect(self.socket_address.ip().into(), socket)
+        let domain: ServerName = self.socket_address.ip().into();
+        let mut protocol_connection = TcpStream::connect(self.socket_address)
+            .map_ok(Connection::new)
+            .and_then(Connection::start_obfs_client)
+            .and_then(|connection| connection.connect_tls(&self.connector, domain))
             .await?;
-        let (client_reader, client_writer) = tokio::io::split(client);
-        let client_reader = client_reader.compat();
-        let client_writer = client_writer.compat_write();
-        let mut protocol_connection = Connection::new(client_reader, client_writer);
 
         let network_config = protocol_connection
             .receive_config()
