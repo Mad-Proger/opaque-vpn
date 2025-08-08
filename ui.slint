@@ -1,0 +1,132 @@
+import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
+export component AppWindow inherits Window {
+    in property <string> window_title;
+
+    out property <string> address;
+    out property <int> port;
+    out property <string> root_cert;
+    out property <string> cert;
+    out property <string> key;
+    callback connect();
+
+    width: 400px;
+    height: 500px;
+    title: window_title;
+    default-font-size: 20px;
+
+    VerticalBox {
+        Text {
+            font-size: 30px;
+            text: "Opaque VPN";
+            horizontal-alignment: center;
+            vertical-alignment: top;
+            height: self.preferred-height;
+        }
+
+        VerticalBox {
+            alignment: start;
+            HorizontalBox {
+                Text {
+                    width: self.preferred-width;
+                    font-size: 15px;
+                    text: "Address:";
+                    horizontal-alignment: left;
+                }
+
+                TextInput {
+                    input-type: text;
+                    font-size: 15px;
+                    width: self.max-width;
+                    horizontal-alignment: left;
+                    edited => {
+                        address = self.text
+                    }
+                }
+            }
+
+            HorizontalBox {
+                Text {
+                    width: self.preferred-width;
+                    font-size: 15px;
+                    text: "Port:";
+                    horizontal-alignment: left;
+                }
+
+                TextInput {
+                    input-type: decimal;
+                    font-size: 15px;
+                    width: self.max-width;
+                    horizontal-alignment: left;
+                    edited => {
+                        port = self.text.to-float();
+                    }
+                }
+            }
+
+            HorizontalBox {
+                Text {
+                    width: self.preferred-width;
+                    font-size: 15px;
+                    text: "Root certificate:";
+                    horizontal-alignment: left;
+                }
+
+                TextInput {
+                    input-type: text;
+                    font-size: 15px;
+                    width: self.max-width;
+                    horizontal-alignment: left;
+                    edited => {
+                        root_cert = self.text
+                    }
+                }
+            }
+
+            HorizontalBox {
+                Text {
+                    width: self.preferred-width;
+                    font-size: 15px;
+                    text: "Certificate:";
+                    horizontal-alignment: left;
+                }
+
+                TextInput {
+                    input-type: text;
+                    font-size: 15px;
+                    width: self.max-width;
+                    horizontal-alignment: left;
+                    edited => {
+                        cert = self.text
+                    }
+                }
+            }
+
+            HorizontalBox {
+                Text {
+                    width: self.preferred-width;
+                    font-size: 15px;
+                    text: "Key:";
+                    horizontal-alignment: left;
+                }
+
+                TextInput {
+                    input-type: text;
+                    font-size: 15px;
+                    width: self.max-width;
+                    horizontal-alignment: left;
+                    edited => {
+                        key = self.text
+                    }
+                }
+            }
+        }
+
+        cbin := Button {
+            height: self.preferred-height;
+            text: "Click Me";
+            clicked => {
+                root.connect();
+            }
+        }
+    }
+}
