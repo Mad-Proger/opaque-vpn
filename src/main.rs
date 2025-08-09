@@ -12,11 +12,13 @@ mod protocol;
 mod routing;
 mod server;
 
-use anyhow::Context;
 use std::{path::Path, sync::LazyLock};
+
+use anyhow::Context;
+use log::error;
+use slint::SharedString;
 use tokio::runtime::{Builder, Runtime};
 
-use slint::SharedString;
 slint::include_modules!();
 
 use crate::{
@@ -61,7 +63,11 @@ fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
         Mode::Client(client_config) => {
             let client =
                 Client::try_new(client_config, config.tls).context("failed to build client")?;
-            TOKIO_RUNTIME.spawn(client.run());
+            TOKIO_RUNTIME.spawn(async move {
+                if let Err(e) = client.run().await {
+                    error!("VPN error: {e}");
+                }
+            });
             Ok(())
         }
         _ => Err(anyhow::anyhow!("Only client mode is supported")),
