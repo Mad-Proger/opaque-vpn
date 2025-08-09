@@ -11,7 +11,6 @@ mod routing;
 mod server;
 
 use anyhow::Context;
-use log::error;
 use std::path::Path;
 use tokio::runtime::Builder;
 
@@ -20,8 +19,9 @@ slint::include_modules!();
 
 use crate::{
     client::Client,
-    config::{load_config, Mode},
-    config_paths::{collect_config_paths, paths_to_model, PathView},
+    config::{Mode, load_config},
+    config_paths::{PathView, collect_config_paths, paths_to_model},
+    server::Server,
 };
 
 fn popup_error(app: &AppWindow, error: anyhow::Error) {
@@ -58,20 +58,18 @@ fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
         Mode::Client(client_config) => {
             let client =
                 Client::try_new(client_config, config.tls).context("failed to build client")?;
-            let stop_sender = client.stop_sender();
-            ctrlc::set_handler(move || {
-                if let Err(err) = stop_sender.send(true) {
-                    error!("could not stop: {err}");
-                }
-            })
-            .context("could not set Ctrl-C handler")?;
 
             runtime
                 .block_on(client.run())
                 .context("client run failed")?;
             Ok(())
         }
-        _ => Err(anyhow::anyhow!("Only client mode is supported")),
+        Mode::Server(server_config) => runtime.block_on(async move {
+            Server::try_new(server_config, config.tls)
+                .map(|server| server.run())?
+                .await
+        }),
+        //   _ => Err(anyhow::anyhow!("Only client mode is supported")),
     }
 }
 
