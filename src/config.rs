@@ -5,10 +5,9 @@ use std::{
     path::Path,
 };
 
-use crate::AppWindow;
-use anyhow::{Context, bail, ensure};
+use anyhow::{bail, ensure, Context};
 use serde::Deserialize;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 
 pub struct ClientConfig {
     pub address: SocketAddr,
@@ -34,28 +33,6 @@ pub struct TlsConfig {
 pub struct Config {
     pub mode: Mode,
     pub tls: TlsConfig,
-}
-
-impl Config {
-    pub fn print_all(&self) {
-        match &self.mode {
-            Mode::Client(client_cfg) => {
-                println!("Mode: Client");
-                println!("  address: {}", client_cfg.address);
-            }
-            Mode::Server(server_cfg) => {
-                println!("Mode: Server");
-                println!("  port: {}", server_cfg.port);
-                println!("  virtual_address: {}", server_cfg.virtual_address);
-                println!("  subnet_mask: {}", server_cfg.subnet_mask);
-            }
-        }
-
-        println!("TLS Configuration:");
-        println!("  root_certificate: {:?}", self.tls.root_certificate);
-        println!("  certificate:      {:?}", self.tls.certificate);
-        println!("  key:              {:?}", self.tls.key);
-    }
 }
 
 #[derive(Deserialize)]
@@ -139,42 +116,5 @@ fn read_tls(raw_tls: RawTls) -> anyhow::Result<TlsConfig> {
         root_certificate: root_cert,
         certificate: cert,
         key,
-    })
-}
-
-pub fn config_from_app(app: &AppWindow) -> anyhow::Result<Config> {
-    let addr_str: String = app.get_address().into();
-    let port_i32: i32 = app.get_port().into();
-    let port: u16 = port_i32.try_into().context("port must be in 0..=65535")?;
-
-    let socket_addr = (addr_str.as_str(), port)
-        .to_socket_addrs()?
-        .next()
-        .context("could not resolve address")?;
-
-    let client_cfg = ClientConfig {
-        address: socket_addr,
-    };
-
-    let root_pem: String = app.get_root_cert().into();
-    let cert_pem: String = app.get_cert().into();
-    let key_pem: String = app.get_key().into();
-
-    println!("{}", root_pem.as_str());
-
-    let root_certificate = CertificateDer::from_pem_slice(root_pem.as_bytes())?;
-    let certificate =
-        CertificateDer::from_pem_slice(cert_pem.as_bytes()).context("invalid certificate PEM")?;
-    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())?;
-
-    let tls_cfg = TlsConfig {
-        root_certificate,
-        certificate,
-        key,
-    };
-
-    Ok(Config {
-        mode: Mode::Client(client_cfg),
-        tls: tls_cfg,
     })
 }

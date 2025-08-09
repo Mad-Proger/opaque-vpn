@@ -1,131 +1,457 @@
-import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
-export component AppWindow inherits Window {
-    in property <string> window_title;
+import { VerticalBox, HorizontalBox, Button, ScrollView, ListView, StandardButton} from "std-widgets.slint";
 
-    out property <string> address;
-    out property <int> port;
-    out property <string> root_cert;
-    out property <string> cert;
-    out property <string> key;
+export component ErrorWindow inherits Window {
+    width: 480px;
+    height: 160px;
+    title: "Error";
+    always-on-top: true;
+
+    in-out property <string> error_message: "";
+
+    callback clicked();
+
+    error_dialog := Dialog {
+        visible: error_message != "";
+        title: "Ошибка";
+        Text {
+            text: error_message;
+            wrap: word-wrap;
+            padding: 8px;
+        }
+
+        StandardButton {
+            kind: ok;
+
+            clicked => {
+                error_message = "";
+                clicked();
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    in property <string> window_title: "";
+    in property <bool> freeze: false;
+
+    in property <[string]> label_menu: ["Add profile", "Profiles"];
+    in property <[string]> label_connect: ["Manual", "From file"];
+    in property <[string]> labels_connect_manual: ["Address:", "Port:", "Root certificate:", "Certificate:", "Key:"];
+    in property <[string]> labels_profiles: [
+        "First",
+        "Second",
+        "Third",
+        "Открыть файл",
+        "Сохранить",
+        "Выход",
+        "Настройки",
+        "Помощь",
+        "О программе",
+        "Выход 1",
+        "Выход 2",
+        "Выход 3",
+        "Выход 4",
+        "Выход 5",
+        "Выход 6",
+        "Выход 7"
+    ];
+    in property <[string]> paths_profiles: [
+        "First",
+        "Second",
+        "Third",
+        "Открыть файл",
+        "Сохранить",
+        "Выход",
+        "Настройки",
+        "Помощь",
+        "О программе",
+        "Выход 1",
+        "Выход 2",
+        "Выход 3",
+        "Выход 4",
+        "Выход 5",
+        "Выход 6",
+        "Выход 7"
+    ];
+
+    out property <bool> opened_menu: false;
+    out property <int> selection_menu: 0;
+    out property <int> selection_add_profile: 0;
+    out property <string> selection_connect_from_file: "";
+
+    out property <string> selection_profile: "";
+    out property <string> address: "";
+    out property <int> port: 0;
+    out property <string> root_cert: "";
+    out property <string> cert: "";
+    out property <string> key: "";
+
+    callback show_error();
+    callback open_file() -> string;
     callback connect();
 
-    width: 400px;
-    height: 500px;
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    min-width: 640px;
+    min-height: 360px;
     title: window_title;
-    default-font-size: 20px;
 
-    VerticalBox {
+    TouchArea {
+        visible: freeze;
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        z: 100;
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        height: 50px;
+        background: #ffffff22;
+
         Text {
-            font-size: 30px;
-            text: "Opaque VPN";
-            horizontal-alignment: center;
-            vertical-alignment: top;
-            height: self.preferred-height;
+            x: 8px;
+            y: -19px;
+            font-size: 55px;
+            color: area_menu.pressed ? #ffffff22 : white;
+            text: "\u{2261}";
         }
 
-        VerticalBox {
-            alignment: start;
-            HorizontalBox {
-                Text {
-                    width: self.preferred-width;
-                    font-size: 15px;
-                    text: "Address:";
-                    horizontal-alignment: left;
-                }
+        area_menu := TouchArea {
+            x: 0px;
+            y: 0px;
+            width: parent.height;
+            height: parent.height;
 
-                TextInput {
-                    input-type: text;
-                    font-size: 15px;
-                    width: self.max-width;
-                    horizontal-alignment: left;
-                    edited => {
-                        address = self.text
-                    }
-                }
-            }
-
-            HorizontalBox {
-                Text {
-                    width: self.preferred-width;
-                    font-size: 15px;
-                    text: "Port:";
-                    horizontal-alignment: left;
-                }
-
-                TextInput {
-                    input-type: decimal;
-                    font-size: 15px;
-                    width: self.max-width;
-                    horizontal-alignment: left;
-                    edited => {
-                        port = self.text.to-float();
-                    }
-                }
-            }
-
-            HorizontalBox {
-                Text {
-                    width: self.preferred-width;
-                    font-size: 15px;
-                    text: "Root certificate:";
-                    horizontal-alignment: left;
-                }
-
-                TextInput {
-                    input-type: text;
-                    font-size: 15px;
-                    width: self.max-width;
-                    horizontal-alignment: left;
-                    edited => {
-                        root_cert = self.text
-                    }
-                }
-            }
-
-            HorizontalBox {
-                Text {
-                    width: self.preferred-width;
-                    font-size: 15px;
-                    text: "Certificate:";
-                    horizontal-alignment: left;
-                }
-
-                TextInput {
-                    input-type: text;
-                    font-size: 15px;
-                    width: self.max-width;
-                    horizontal-alignment: left;
-                    edited => {
-                        cert = self.text
-                    }
-                }
-            }
-
-            HorizontalBox {
-                Text {
-                    width: self.preferred-width;
-                    font-size: 15px;
-                    text: "Key:";
-                    horizontal-alignment: left;
-                }
-
-                TextInput {
-                    input-type: text;
-                    font-size: 15px;
-                    width: self.max-width;
-                    horizontal-alignment: left;
-                    edited => {
-                        key = self.text
-                    }
-                }
-            }
-        }
-
-        cbin := Button {
-            height: self.preferred-height;
-            text: "Click Me";
             clicked => {
-                root.connect();
+                opened_menu = true;
+            }
+        }
+
+        Text {
+            x: 55px;
+            y: 3px;
+            font-size: 30px;
+            text: label_menu[selection_menu];
+        }
+
+        HorizontalLayout {
+            padding-right: 10pt;
+            alignment: end;
+            y: 3px;
+            Text {
+                font-size: 30px;
+                text: "Opaque VPN";
+            }
+        }
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 49px;
+        background: white;
+        width: root.width;
+        height: 2px;
+    }
+
+    Rectangle {
+        visible: opened_menu;
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        z: 1;
+
+        Rectangle {
+            background: #00000066;
+            animate background {
+                duration: 200ms;
+                easing: ease-in-out;
+            }
+        }
+
+        TouchArea {
+            x: 0px;
+            width: 260px;
+        }
+
+        TouchArea {
+            x: 260px;
+            width: parent.width - 260px;
+            clicked => {
+                opened_menu = false;
+            }
+        }
+    }
+
+    Rectangle {
+        width: 260px;
+        height: parent.height;
+        x: opened_menu ? 0px : -self.width;
+        y: 0px;
+        animate x {
+            duration: 200ms;
+            easing: ease-in-out;
+        }
+        background: #222;
+        z: 2;
+
+        Text {
+            y: 3px;
+            font-size: 30px;
+            horizontal-alignment: center;
+            text: "Menu";
+            color: white;
+        }
+
+        Rectangle {
+            x: 0px;
+            y: 49px;
+            background: white;
+            width: parent.width;
+            height: 2px;
+        }
+
+        VerticalLayout {
+            y: 50px;
+            width: parent.width;
+            padding-top: 5px;
+            spacing: 5px;
+
+            for label[i] in label_menu: Rectangle {
+                height: 30px;
+                Text {
+                    font-size: 20px;
+                    color: area_list_menu.pressed ? #ffffff22 : white;
+                    text: label;
+                }
+
+                Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: area_list_menu.has-hover ? #ffffff18 : transparent;
+                }
+
+                area_list_menu := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+
+                    clicked => {
+                        if (i != 0 || selection_menu != 0) {
+                            selection_add_profile = 0;
+                            selection_connect_from_file = "";
+                        }
+                        opened_menu = false;
+                        selection_menu = i;
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: selection_menu == 0;
+        HorizontalLayout {
+            y: 50px;
+            height: 30px;
+
+            for label[i] in label_menu: Rectangle {
+                Text {
+                    horizontal-alignment: center;
+                    font-size: 20px;
+                    color: area_list_add_profile.pressed ? #ffffff22 : white;
+                    text: label;
+                }
+
+                Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: area_list_add_profile.has-hover ? #ffffff18 : transparent;
+                }
+
+                area_list_add_profile := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+
+                    clicked => {
+                        if (i == 0) {
+                            selection_connect_from_file = "";
+                        }
+                        selection_add_profile = i;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            x: selection_add_profile == 0 ? 0px : -self.width * 1.5;
+            animate x {
+                duration: 200ms;
+                easing: ease-in-out;
+            }
+
+            ListView {
+                y: 80px;
+                padding-left: 12px;
+
+                for label[i] in labels_connect_manual: HorizontalBox {
+                    Text {
+                        width: self.preferred-width;
+                        font-size: 15px;
+                        text: label;
+                        horizontal-alignment: left;
+                    }
+
+                    Rectangle {
+                        width: self.max-width;
+                        height: area_add_profile_manual.preferred-height;
+                        background: area_add_profile_manual.has-focus ? #ffffff18 : #ffffff08;
+
+                        area_add_profile_manual := TextInput {
+                            x: parent.x + 5px;
+                            width: parent.width;
+                            input-type: text;
+                            font-size: 15px;
+                            horizontal-alignment: left;
+                            edited => {
+                                address = self.text;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                y: root.height - 50px;
+                width: root.width;
+                height: 50px;
+                background: #ff8b3d;
+
+                Text {
+                    y: 3px;
+                    font-size: 30px;
+                    horizontal-alignment: center;
+                    color: area_add_profile_connect.pressed ? #ffffff72 : white;
+                    text: "Connect";
+                }
+
+                area_add_profile_connect := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+
+                    clicked => {
+                        connect();
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            x: selection_add_profile == 1 ? 0px : self.width * 1.5;
+            animate x {
+                duration: 200ms;
+                easing: ease-in-out;
+            }
+
+            VerticalLayout {
+                y: 80px;
+                width: root.width;
+                padding-left: 12px;
+                alignment: start;
+
+                HorizontalBox {
+                    Text {
+                        width: self.preferred-width;
+                        font-size: 15px;
+                        text: "File selected:  ";
+                        horizontal-alignment: left;
+                    }
+
+                    Rectangle {
+                        width: self.max-width;
+                        height: area_add_profile_from_file.preferred-height;
+                        background: #ffffff08;
+
+                        area_add_profile_from_file := Text {
+                            x: parent.x + 5px;
+                            width: self.max-width;
+                            font-size: 15px;
+                            text: selection_connect_from_file;
+                            horizontal-alignment: left;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                y: root.height - 50px;
+                width: root.width;
+                height: 50px;
+                background: #ff8b3d;
+
+                Text {
+                    y: 3px;
+                    font-size: 30px;
+                    horizontal-alignment: center;
+                    color: area_add_profile_browse.pressed ? #ffffff72 : white;
+                    text: selection_connect_from_file == "" ? "Browse" : "Connect";
+                }
+
+                area_add_profile_browse := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+
+                    clicked => {
+                        if (selection_connect_from_file != "") {
+                            selection_profile = selection_connect_from_file;
+                            connect();
+                        }
+                        if (selection_connect_from_file == "") {
+                            selection_connect_from_file = open_file();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: selection_menu == 1;
+
+        ListView {
+            y: 50px;
+            width: root.width;
+            height: root.height - self.y;
+
+            for label[i] in labels_profiles: Rectangle {
+                height: 35px;
+                HorizontalBox {
+                    alignment: start;
+                    Text {
+                        font-size: 15px;
+                        color: area_profiles_list.pressed ? #ffffff22 : white;
+                        text: label;
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: area_profiles_list.has-hover ? #ffffff18 : transparent;
+                }
+
+                area_profiles_list := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+
+                    clicked => {
+                        selection_profile = paths_profiles[i];
+                        connect();
+                    }
+                }
             }
         }
     }
