@@ -141,10 +141,10 @@ impl<S: PacketSender + 'static> Drop for IpLease<S> {
         let router = self.router.clone();
         tokio::spawn(async move {
             let route = router.routes.write().await.remove(&addr);
-            if let Some(sink) = route {
-                if let Err(e) = sink.lock().await.close_dyn().await {
-                    warn!("could not close stream to {addr}: {e}");
-                }
+            if let Some(sink) = route
+                && let Err(e) = sink.lock().await.close_dyn().await
+            {
+                warn!("could not close stream to {addr}: {e}");
             }
             router.ip_manager.lock().await.release(addr);
         });

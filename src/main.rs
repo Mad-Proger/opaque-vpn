@@ -1,4 +1,6 @@
 #![feature(ip_from)]
+// TODO: remove
+#![allow(dead_code)]
 
 mod client;
 mod common;
@@ -11,8 +13,8 @@ mod routing;
 mod server;
 
 use anyhow::Context;
-use std::path::Path;
-use tokio::runtime::Builder;
+use std::{path::Path, sync::LazyLock};
+use tokio::runtime::{Builder, Runtime};
 
 use slint::SharedString;
 slint::include_modules!();
@@ -21,12 +23,11 @@ use crate::{
     client::Client,
     config::{Mode, load_config},
     config_paths::{PathView, collect_config_paths, paths_to_model},
-    server::Server,
 };
 
 fn popup_error(app: &AppWindow, error: anyhow::Error) {
     let dlg = ErrorWindow::new().expect("error initializing error window");
-    dlg.set_error_message(format!("{:#}", error).into());
+    dlg.set_error_message(format!("{error:#}").into());
     app.set_freeze(true);
 
     let app_weak = app.as_weak();
@@ -40,36 +41,30 @@ fn popup_error(app: &AppWindow, error: anyhow::Error) {
             dlg.window().hide().expect("cannot stop erroring");
         }
     });
-
     dlg.window().show().expect("error erroring");
 }
+
+static TOKIO_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_io()
+        .enable_time()
+        .build()
+        .expect("could not create runtime")
+});
 
 fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
     let config_path = app.get_selection_profile();
     let config = load_config(config_path).context("failed to load config")?;
 
-    let runtime = Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build()
-        .context("could not create runtime")?;
-
     match config.mode {
         Mode::Client(client_config) => {
             let client =
                 Client::try_new(client_config, config.tls).context("failed to build client")?;
-
-            runtime
-                .block_on(client.run())
-                .context("client run failed")?;
+            TOKIO_RUNTIME.spawn(client.run());
             Ok(())
         }
-        Mode::Server(server_config) => runtime.block_on(async move {
-            Server::try_new(server_config, config.tls)
-                .map(|server| server.run())?
-                .await
-        }),
-        //   _ => Err(anyhow::anyhow!("Only client mode is supported")),
+        _ => Err(anyhow::anyhow!("Only client mode is supported")),
     }
 }
 
@@ -102,10 +97,10 @@ fn main() -> anyhow::Result<()> {
     app.on_connect({
         let app_weak = app_weak.clone();
         move || {
-            if let Some(app) = app_weak.upgrade() {
-                if let Err(e) = connect_handler(&app) {
-                    popup_error(&app, e);
-                }
+            if let Some(app) = app_weak.upgrade()
+                && let Err(e) = connect_handler(&app)
+            {
+                popup_error(&app, e);
             }
         }
     });
