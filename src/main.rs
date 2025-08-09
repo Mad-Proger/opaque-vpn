@@ -34,11 +34,11 @@ fn main() -> anyhow::Result<()> {
         println!("Connection established!");
         let app: AppWindow = weak.upgrade().unwrap();
 
-        // let config_path = std::env::args()
-        //     .nth(1)
-        //     .context("no config file provided")
-        //     .unwrap();
-        // let config = load_config(config_path).unwrap();
+        let config_path = std::env::args()
+            .nth(1)
+            .context("no config file provided")
+            .unwrap();
+        let config = load_config(config_path).unwrap();
 
         let config = match config_from_app(&app) {
             Ok(c) => c,

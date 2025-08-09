@@ -52,8 +52,6 @@ impl Config {
         }
 
         println!("TLS Configuration:");
-        // Поскольку CertificateDer и PrivateKeyDer не имеют impl Display,
-        // выводим их дебагом. При необходимости можно сериализовать в PEM.
         println!("  root_certificate: {:?}", self.tls.root_certificate);
         println!("  certificate:      {:?}", self.tls.certificate);
         println!("  key:              {:?}", self.tls.key);
@@ -162,12 +160,12 @@ pub fn config_from_app(app: &AppWindow) -> anyhow::Result<Config> {
     let cert_pem: String = app.get_cert().into();
     let key_pem: String = app.get_key().into();
 
-    println!("{}", root_pem);
-    let root_certificate = CertificateDer::from_pem_slice(root_pem.as_bytes())
-        .context("invalid root_certificate PEM")?;
+    println!("{}", root_pem.as_str());
+
+    let root_certificate = CertificateDer::from_pem_slice(root_pem.as_bytes())?;
     let certificate =
         CertificateDer::from_pem_slice(cert_pem.as_bytes()).context("invalid certificate PEM")?;
-    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes()).context("invalid key PEM")?;
+    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())?;
 
     let tls_cfg = TlsConfig {
         root_certificate,
