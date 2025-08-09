@@ -1,12 +1,12 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
-use futures::{io, TryFutureExt};
+use futures::{TryFutureExt, io};
 use log::trace;
 use tokio::{net::TcpStream, sync::watch};
 use tokio_rustls::{
-    rustls::{self, pki_types::ServerName},
     TlsConnector,
+    rustls::{self, pki_types::ServerName},
 };
 use tun::AbstractDevice;
 

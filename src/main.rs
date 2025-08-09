@@ -63,6 +63,7 @@ fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
         Mode::Client(client_config) => {
             let client =
                 Client::try_new(client_config, config.tls).context("failed to build client")?;
+            let _stop_sender = client.stop_sender(); // _stop_sender.send(true)
             TOKIO_RUNTIME.spawn(async move {
                 if let Err(e) = client.run().await {
                     error!("VPN error: {e}");
