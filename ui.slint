@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, Button, ScrollView, ListView, StandardButton} from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, Button, ScrollView, ListView, StandardButton, Palette} from "std-widgets.slint";
 
 export component ErrorWindow inherits Window {
     width: 480px;
@@ -111,14 +111,14 @@ export component AppWindow inherits Window {
         x: 0px;
         y: 0px;
         height: 50px;
-        background: #ffffff22;
 
         Text {
             x: 8px;
             y: -19px;
             font-size: 55px;
-            color: area_menu.pressed ? #ffffff22 : white;
             text: "\u{2261}";
+            color: Palette.foreground;
+            opacity: area_menu.pressed ? 0.13 : 1.0;
         }
 
         area_menu := TouchArea {
@@ -137,7 +137,6 @@ export component AppWindow inherits Window {
             y: 3px;
             font-size: 30px;
             text: label_menu[selection_menu];
-            color: white;
         }
 
         HorizontalLayout {
@@ -147,7 +146,6 @@ export component AppWindow inherits Window {
             Text {
                 font-size: 30px;
                 text: "Opaque VPN";
-                color: white;
             }
         }
     }
@@ -207,7 +205,6 @@ export component AppWindow inherits Window {
             font-size: 30px;
             horizontal-alignment: center;
             text: "Menu";
-            color: white;
         }
 
         Rectangle {
@@ -228,8 +225,9 @@ export component AppWindow inherits Window {
                 height: 30px;
                 Text {
                     font-size: 20px;
-                    color: area_list_menu.pressed ? #ffffff22 : white;
                     text: label;
+                    color: Palette.foreground;
+                    opacity: area_menu.pressed ? 0.13 : 1.0;
                 }
 
                 Rectangle {
@@ -265,8 +263,9 @@ export component AppWindow inherits Window {
                 Text {
                     horizontal-alignment: center;
                     font-size: 20px;
-                    color: area_list_add_profile.pressed ? #ffffff22 : white;
                     text: label;
+                    color: Palette.foreground;
+                    opacity: area_menu.pressed ? 0.13 : 1.0;
                 }
 
                 Rectangle {
@@ -306,7 +305,8 @@ export component AppWindow inherits Window {
                         font-size: 15px;
                         text: label;
                         horizontal-alignment: left;
-                        color: white;
+                        color: Palette.foreground;
+                        opacity: area_menu.pressed ? 0.13 : 1.0;
                     }
 
                     Rectangle {
@@ -315,7 +315,6 @@ export component AppWindow inherits Window {
                         background: area_add_profile_manual.has-focus ? #ffffff18 : #ffffff08;
 
                         area_add_profile_manual := TextInput {
-                            x: parent.x + 5px;
                             width: parent.width;
                             input-type: text;
                             font-size: 15px;
@@ -338,8 +337,10 @@ export component AppWindow inherits Window {
                     y: 3px;
                     font-size: 30px;
                     horizontal-alignment: center;
-                    color: area_add_profile_connect.pressed ? #ffffff72 : white;
+
                     text: "Connect";
+                    color: Palette.foreground;
+                    opacity: area_menu.pressed ? 0.13 : 1.0;
                 }
 
                 area_add_profile_connect := TouchArea {
@@ -372,7 +373,8 @@ export component AppWindow inherits Window {
                         font-size: 15px;
                         text: "File selected:  ";
                         horizontal-alignment: left;
-                        color: white;
+                        color: Palette.foreground;
+                        opacity: area_menu.pressed ? 0.13 : 1.0;
                     }
 
                     Rectangle {
@@ -381,7 +383,6 @@ export component AppWindow inherits Window {
                         background: #ffffff08;
 
                         area_add_profile_from_file := Text {
-                            x: parent.x + 5px;
                             width: self.max-width;
                             font-size: 15px;
                             text: selection_connect_from_file;
@@ -402,8 +403,10 @@ export component AppWindow inherits Window {
                     y: 3px;
                     font-size: 30px;
                     horizontal-alignment: center;
-                    color: area_add_profile_browse.pressed ? #ffffff72 : white;
+
                     text: selection_connect_from_file == "" ? "Browse" : "Connect";
+                    color: Palette.foreground;
+                    opacity: area_menu.pressed ? 0.13 : 1.0;
                 }
 
                 area_add_profile_browse := TouchArea {
@@ -438,8 +441,10 @@ export component AppWindow inherits Window {
                     alignment: start;
                     Text {
                         font-size: 15px;
-                        color: area_profiles_list.pressed ? #ffffff22 : white;
+
                         text: label;
+                        color: Palette.foreground;
+                        opacity: area_menu.pressed ? 0.13 : 1.0;
                     }
                 }
 
