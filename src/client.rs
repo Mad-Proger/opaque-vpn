@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use futures::{io, TryFutureExt};
+use log::trace;
 use tokio::{net::TcpStream, sync::watch};
 use tokio_rustls::{
     rustls::{self, pki_types::ServerName},
@@ -50,6 +51,7 @@ impl Client {
             .receive_config()
             .await
             .context("could not receive network config")?;
+        trace!("received network config");
         let tun_config = configure_tun(network_config);
         let device = tun::create_as_async(&tun_config)?;
         let mtu = device.mtu().unwrap() as usize;
@@ -59,6 +61,7 @@ impl Client {
         let tun_sender: TunSender = tun_writer.into();
         let (packet_sender, packet_receiver) = protocol_connection.into_parts();
 
+        trace!("starting tunnel");
         let send_fut = forward_packets(packet_receiver, tun_sender, self.stop_receiver.clone());
         let receive_fut = forward_packets(tun_receiver, packet_sender, self.stop_receiver.clone());
         tokio::try_join!(send_fut, receive_fut)?;
@@ -84,7 +87,7 @@ fn configure_tun(network_config: NetworkConfig) -> tun::Configuration {
     config
 }
 
-async fn forward_packets<R: PacketReceiver, S: PacketSender>(
+async fn forward_packets<R: PacketReceiver + std::any::Any, S: PacketSender>(
     mut receiver: R,
     mut sender: S,
     mut stop_token: watch::Receiver<bool>,
@@ -101,7 +104,9 @@ async fn forward_packets<R: PacketReceiver, S: PacketSender>(
             }
             packet_res = packet_fut => {
                 let packet = packet_res?;
+                trace!("received packet from {}", core::any::type_name::<R>());
                 sender.send(&packet).await?;
+                trace!("sent packet to {}", core::any::type_name::<S>());
             }
         }
     }
