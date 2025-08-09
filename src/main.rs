@@ -50,6 +50,7 @@ fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
 
     let runtime = Builder::new_current_thread()
         .enable_io()
+        .enable_time()
         .build()
         .context("could not create runtime")?;
 
