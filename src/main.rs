@@ -12,12 +12,14 @@ mod protocol;
 mod routing;
 mod server;
 
-use std::{path::Path, sync::LazyLock};
+use std::{path::Path, sync::LazyLock, sync::Mutex};
 
 use anyhow::Context;
-use log::error;
 use slint::SharedString;
-use tokio::runtime::{Builder, Runtime};
+use tokio::{
+    runtime::{Builder, Runtime},
+    sync::watch,
+};
 
 slint::include_modules!();
 
@@ -27,24 +29,8 @@ use crate::{
     config_paths::{PathView, collect_config_paths, paths_to_model},
 };
 
-fn popup_error(app: &AppWindow, error: anyhow::Error) {
-    let dlg = ErrorWindow::new().expect("error initializing error window");
-    dlg.set_error_message(format!("{error:#}").into());
-    app.set_freeze(true);
-
-    let app_weak = app.as_weak();
-    let dlg_weak = dlg.as_weak();
-
-    dlg.on_clicked(move || {
-        if let Some(app) = app_weak.upgrade() {
-            app.set_freeze(false);
-        }
-        if let Some(dlg) = dlg_weak.upgrade() {
-            dlg.window().hide().expect("cannot stop erroring");
-        }
-    });
-    dlg.window().show().expect("error erroring");
-}
+static STOP_SENDER: LazyLock<Mutex<Option<watch::Sender<bool>>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 static TOKIO_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     Builder::new_multi_thread()
@@ -55,24 +41,35 @@ static TOKIO_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .expect("could not create runtime")
 });
 
-fn connect_handler(app: &AppWindow) -> anyhow::Result<()> {
-    let config_path = app.get_selection_profile();
+fn get_client(app: &AppWindow) -> anyhow::Result<Client> {
+    let config_path = app.get_selection_from_file();
     let config = load_config(config_path).context("failed to load config")?;
 
     match config.mode {
         Mode::Client(client_config) => {
-            let client =
-                Client::try_new(client_config, config.tls).context("failed to build client")?;
-            let _stop_sender = client.stop_sender(); // _stop_sender.send(true)
-            TOKIO_RUNTIME.spawn(async move {
-                if let Err(e) = client.run().await {
-                    error!("VPN error: {e}");
-                }
-            });
-            Ok(())
+            Client::try_new(client_config, config.tls).context("failed to build client")
         }
-        _ => Err(anyhow::anyhow!("Only client mode is supported")),
+        _ => Err(anyhow::anyhow!("config is not in client mode")),
     }
+}
+
+fn connect_handler(app_weak: &slint::Weak<AppWindow>, client: Client) {
+    TOKIO_RUNTIME.spawn({
+        let app_weak = app_weak.clone();
+        async move {
+            if let Err(e) = client.run().await {
+                let msg = format!("{:#}", e);
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(app) = app_weak.upgrade() {
+                        app.set_error_message(msg.into());
+                        app.set_status_connect(SharedString::from("Disconnected"));
+                    } else {
+                        eprintln!("failed to upgrade link in connect_handler");
+                    }
+                });
+            }
+        }
+    });
 }
 
 fn main() -> anyhow::Result<()> {
@@ -84,8 +81,8 @@ fn main() -> anyhow::Result<()> {
 
     let config_paths = match collect_config_paths(Path::new("config")) {
         Ok(addrs) => addrs,
-        Err(e) => {
-            popup_error(&app, e);
+        Err(error) => {
+            app.set_error_message(format!("{error:#}").into());
             Vec::new()
         }
     };
@@ -101,13 +98,48 @@ fn main() -> anyhow::Result<()> {
             .into()
     });
 
-    app.on_connect({
-        let app_weak = app_weak.clone();
-        move || {
-            if let Some(app) = app_weak.upgrade()
-                && let Err(e) = connect_handler(&app)
-            {
-                popup_error(&app, e);
+    let app_weak_connect = app_weak.clone();
+    app.on_connect(move || {
+        if let Some(app) = app_weak_connect.upgrade() {
+            app.set_status_connect(SharedString::from("Connecting..."));
+
+            let client = match get_client(&app) {
+                Ok(c) => c,
+                Err(error) => {
+                    app.set_error_message(format!("{error:#}").into());
+                    app.set_status_connect(SharedString::from("Disconnected"));
+                    return;
+                }
+            };
+
+            *STOP_SENDER.lock().unwrap() = Some(client.stop_sender());
+            connect_handler(&app_weak_connect, client);
+            app.set_status_connect(SharedString::from("Connected"));
+        }
+    });
+
+    app.on_disconnect(move || {
+        if let Some(sender) = STOP_SENDER.lock().unwrap().take() {
+            if let Err(e) = sender.send(true) {
+                if let Some(app) = app_weak.upgrade() {
+                    app.set_error_message(format!("{e:#}").into());
+                } else {
+                    eprintln!("failed to upgrade link in disconnect");
+                }
+            } else {
+                if let Some(app) = app_weak.upgrade() {
+                    app.set_status_connect(SharedString::from("Disconnected"));
+                } else {
+                    eprintln!(
+                        "[UI ERROR] Could not upgrade AppWindow to set status to Disconnected"
+                    );
+                }
+            }
+        } else {
+            if let Some(app) = app_weak.upgrade() {
+                app.set_error_message("no active connection to stop".into());
+            } else {
+                eprintln!("failed to upgrade link in disconnect");
             }
         }
     });
