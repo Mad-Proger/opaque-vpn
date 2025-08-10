@@ -15,6 +15,7 @@ mod server;
 use std::{path::Path, sync::LazyLock, sync::Mutex};
 
 use anyhow::Context;
+use log::error;
 use slint::SharedString;
 use tokio::{
     runtime::{Builder, Runtime},
@@ -119,29 +120,25 @@ fn main() -> anyhow::Result<()> {
     });
 
     app.on_disconnect(move || {
-        if let Some(sender) = STOP_SENDER.lock().unwrap().take() {
-            if let Err(e) = sender.send(true) {
-                if let Some(app) = app_weak.upgrade() {
-                    app.set_error_message(format!("{e:#}").into());
-                } else {
-                    eprintln!("failed to upgrade link in disconnect");
-                }
-            } else {
-                if let Some(app) = app_weak.upgrade() {
-                    app.set_status_connect(SharedString::from("Disconnected"));
-                } else {
-                    eprintln!(
-                        "[UI ERROR] Could not upgrade AppWindow to set status to Disconnected"
-                    );
-                }
+        let stop_result = STOP_SENDER
+            .lock()
+            .unwrap()
+            .take()
+            .context("no active connection to stop")
+            .and_then(|sender| Ok(sender.send(true)?));
+
+        let Some(app) = app_weak.upgrade() else {
+            if let Err(e) = stop_result {
+                error!("{e:#}");
             }
-        } else {
-            if let Some(app) = app_weak.upgrade() {
-                app.set_error_message("no active connection to stop".into());
-            } else {
-                eprintln!("failed to upgrade link in disconnect");
-            }
-        }
+            error!("failed to upgrade link in disconnect");
+            return;
+        };
+
+        match stop_result {
+            Ok(()) => app.set_status_connect("Disconnected".into()),
+            Err(e) => app.set_error_message(format!("{e:#}").into()),
+        };
     });
 
     app.run()?;
