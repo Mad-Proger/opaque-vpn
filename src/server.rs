@@ -4,20 +4,19 @@ use std::{
 };
 
 use anyhow::Context;
-use futures::{io::AsyncRead, FutureExt};
+use futures::FutureExt;
 use log::{error, info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{
     rustls::{self, server::WebPkiClientVerifier},
     TlsAcceptor,
 };
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tun::{AbstractDevice, AsyncDevice};
 
 use crate::{
     common::get_root_cert_store,
     config::{ServerConfig, TlsConfig},
-    packet_stream::{PacketReceiver, TaggedPacketReceiver, TunReceiver, TunSender},
+    packet_stream::{PacketReceiver, TunReceiver, TunSender},
     protocol::{Connection, NetworkConfig},
     routing::{Router, RouterConfig},
 };
@@ -78,11 +77,11 @@ impl Server {
     }
 
     async fn handle_client(self: Arc<Self>, socket: TcpStream) -> anyhow::Result<()> {
-        let client = self.acceptor.accept(socket).await?;
-        let (client_reader, client_writer) = tokio::io::split(client);
-        let client_reader = client_reader.compat();
-        let client_writer = client_writer.compat_write();
-        let mut protocol_connection = Connection::new(client_reader, client_writer);
+        let mut protocol_connection = Connection::new(socket)
+            .start_obfs_server()
+            .await?
+            .accept_tls(&self.acceptor)
+            .await?;
 
         let ip_lease = self
             .router
@@ -110,9 +109,9 @@ impl Server {
         Ok(())
     }
 
-    async fn forward_packets<IO: AsyncRead + Unpin + Send>(
+    async fn forward_packets<Receiver: PacketReceiver>(
         self: Arc<Self>,
-        mut packet_receiver: TaggedPacketReceiver<IO>,
+        mut packet_receiver: Receiver,
     ) -> anyhow::Result<()> {
         loop {
             let packet = packet_receiver.receive().await?;
