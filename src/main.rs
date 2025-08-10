@@ -120,25 +120,21 @@ fn main() -> anyhow::Result<()> {
     });
 
     app.on_disconnect(move || {
-        let stop_result = STOP_SENDER
-            .lock()
-            .unwrap()
-            .take()
-            .context("no active connection to stop")
-            .and_then(|sender| Ok(sender.send(true)?));
-
         let Some(app) = app_weak.upgrade() else {
-            if let Err(e) = stop_result {
-                error!("{e:#}");
-            }
             error!("failed to upgrade link in disconnect");
             return;
         };
 
-        match stop_result {
+        match STOP_SENDER
+            .lock()
+            .unwrap()
+            .take()
+            .context("no active connection to stop")
+            .and_then(|sender| Ok(sender.send(true)?))
+        {
             Ok(()) => app.set_status_connect("Disconnected".into()),
             Err(e) => app.set_error_message(format!("{e:#}").into()),
-        };
+        }
     });
 
     app.run()?;
