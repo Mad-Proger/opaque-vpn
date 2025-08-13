@@ -5,9 +5,9 @@ use std::{
     path::Path,
 };
 
-use anyhow::{bail, ensure, Context};
+use anyhow::{Context, bail, ensure};
 use serde::Deserialize;
-use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 
 pub struct ClientConfig {
     pub address: SocketAddr,

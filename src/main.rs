@@ -54,18 +54,17 @@ fn get_client(app: &AppWindow) -> anyhow::Result<Client> {
     }
 }
 
-fn connect_handler(app_weak: &slint::Weak<AppWindow>, client: Client) {
+fn connect_handler(app_weak: slint::Weak<AppWindow>, client: Client) {
     TOKIO_RUNTIME.spawn({
-        let app_weak = app_weak.clone();
         async move {
             if let Err(e) = client.run().await {
-                let msg = format!("{:#}", e);
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(app) = app_weak.upgrade() {
-                        app.set_error_message(msg.into());
+                let _ = slint::invoke_from_event_loop(move || match app_weak.upgrade() {
+                    Some(app) => {
+                        app.set_error_message(format!("{:#}", e).into());
                         app.set_status_connect(SharedString::from("Disconnected"));
-                    } else {
-                        eprintln!("failed to upgrade link in connect_handler");
+                    }
+                    None => {
+                        error!("failed to upgrade link in connect_handler");
                     }
                 });
             }
@@ -114,7 +113,7 @@ fn main() -> anyhow::Result<()> {
             };
 
             *STOP_SENDER.lock().unwrap() = Some(client.stop_sender());
-            connect_handler(&app_weak_connect, client);
+            connect_handler(app_weak_connect.clone(), client);
             app.set_status_connect(SharedString::from("Connected"));
         }
     });

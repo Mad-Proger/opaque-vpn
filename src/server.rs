@@ -8,8 +8,8 @@ use futures::FutureExt;
 use log::{error, info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{
-    rustls::{self, server::WebPkiClientVerifier},
     TlsAcceptor,
+    rustls::{self, server::WebPkiClientVerifier},
 };
 use tun::{AbstractDevice, AsyncDevice};
 

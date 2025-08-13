@@ -1,7 +1,7 @@
 use futures::TryFutureExt;
 use obfswire::{Config, ObfuscatedStream, SharedKey};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{client, rustls::pki_types::ServerName, server, TlsAcceptor, TlsConnector};
+use tokio_rustls::{TlsAcceptor, TlsConnector, client, rustls::pki_types::ServerName, server};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{

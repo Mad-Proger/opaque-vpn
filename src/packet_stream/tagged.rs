@@ -1,8 +1,8 @@
 use futures::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::packet_stream::{
-    util::{AsyncReadFixed, AsyncWriteFixed},
     PacketReceiver, PacketSender,
+    util::{AsyncReadFixed, AsyncWriteFixed},
 };
 
 pub struct TaggedPacketReceiver<IO: Send> {

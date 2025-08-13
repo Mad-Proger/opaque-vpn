@@ -1,4 +1,4 @@
-use tokio_rustls::rustls::{pki_types::CertificateDer, RootCertStore};
+use tokio_rustls::rustls::{RootCertStore, pki_types::CertificateDer};
 
 pub fn get_root_cert_store(root_cert: CertificateDer<'static>) -> anyhow::Result<RootCertStore> {
     let mut store = RootCertStore::empty();
