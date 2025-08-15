@@ -1,0 +1,98 @@
+import { VerticalBox,  ScrollView, StandardButton, Palette } from "std-widgets.slint";
+import { LineEditInfo, TopPanel } from "utils.slint";
+import { BottomButton } from "button.slint";
+import { MenuScreen } from "screens/menu.slint";
+import { AddProfileScreen } from "screens/add_profile.slint";
+import { ProfilesScreen } from "screens/profiles.slint";
+import { MessageScreen } from "screens/message.slint";
+
+export component AppWindow inherits Window {
+    in property <string> window_title;
+    in property <string> status;
+    in-out property <string> message;
+    in property <[LineEditInfo]> profiles <=> profiles_screen.info;
+
+    in-out property <[LineEditInfo]> manual: [
+        { label: "Address:", text: "" },
+        { label: "Port:", text: "" },
+        { label: "Root certificate:", text: "" },
+        { label: "Certificate:", text: "" },
+        { label: "Key:", text: "" },
+    ];
+    in-out property <LineEditInfo> from_file: { label: "", text: "" };
+
+    out property <int> menu_index: 0;
+
+    callback browse <=> add_profile_screen.browse;
+    callback reload;
+    callback disconnect();
+    callback connect();
+
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    min-width: 640px;
+    min-height: 360px;
+    title: window_title;
+
+    message_screen := MessageScreen {
+        z: 10;
+        text <=> message;
+    }
+
+    top_panel := TopPanel {
+        width: parent.width;
+        text_left: menu_screen.section;
+        text_right: "Opaque VPN";
+    }
+
+    menu_screen := MenuScreen {
+        z: 1;
+        clicked(i) => {
+            if (i != parent.menu_index) {
+                parent.from_file.text = "";
+                profiles_screen.selected = -1;
+                add_profile_screen.selection = 0;
+            }
+            parent.menu_index = i;
+        }
+    }
+
+    add_profile_screen := AddProfileScreen {
+        y: top_panel.height - parent.height * 1.5 * (parent.menu_index - 0);
+        height: root.height - top_panel.height - bottom_button.height;
+        manual_info <=> manual;
+        from_file_info <=> from_file;
+    }
+
+    profiles_screen := ProfilesScreen {
+        y: top_panel.height - parent.height * 1.5 * (parent.menu_index - 1);
+        height: root.height - top_panel.height - bottom_button.height;
+        clicked(info) => {
+            from_file = info;
+        }
+
+        reload => {
+            parent.reload();
+            if (self.selected != -1 && self.selected < profiles.length) {
+                from_file = profiles[self.selected];
+            } else {
+                from_file = { label: "", text: "" };
+                self.selected = -1;
+            }
+        }
+    }
+
+    bottom_button := BottomButton {
+        touch_area-visible: from_file.text != "";
+        y: root.height - parent.y - self.height;
+        text: status + (status == "Connected" ? " to " + from_file.label : "");
+        background: #ff8b3d;
+        clicked => {
+            if (status == "Connected") {
+                disconnect();
+            } else if (status == "Disconnected") {
+                connect();
+            }
+        }
+    }
+}

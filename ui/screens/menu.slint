@@ -1,0 +1,79 @@
+import { Palette } from "std-widgets.slint";
+import { CustomButton, MenuButton } from "../button.slint";
+import { Blur, TopPanel } from "../utils.slint";
+
+
+export component MenuPanel inherits Rectangle {
+    in property <[string]> labels;
+    in property <bool> opened;
+
+    callback clicked(int);
+
+    x: opened ? 0px : -self.width;
+    width: 260px;
+    background: Palette.background;
+
+    animate x {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    TopPanel {
+        width: 260px;
+        text_left: "Menu";
+    }
+
+    VerticalLayout {
+        y: 55px;
+
+        for label[i] in labels: CustomButton {
+            height: 30px;
+            font-size: 20px;
+            text: label;
+            hover-opacity: self.has-hover ? 0.1 : 0.0;
+            clicked => {
+                root.clicked(i);
+            }
+        }
+    }
+}
+
+export component MenuScreen inherits Rectangle {
+    property <[string]> labels: ["Add profile", "Profiles"];
+    property <bool> opened;
+    in-out property <string> section: labels[0];
+
+    callback clicked(int);
+
+    Blur {
+        z: -1;
+        trigger: parent.opened;
+        freeze: true;
+    }
+
+    TouchArea {
+        visible: parent.opened;
+        x: 260px;
+
+        clicked => {
+            parent.opened = false;
+        }
+    }
+
+    MenuPanel {
+        labels: parent.labels;
+        opened: parent.opened;
+
+        clicked(i) => {
+            parent.opened = false;
+            parent.section = labels[i];
+            parent.clicked(i);
+        }
+    }
+
+    MenuButton {
+        clicked => {
+            parent.opened = !parent.opened;
+        }
+    }
+}

@@ -1,0 +1,81 @@
+import { LineEdit, Palette } from "std-widgets.slint";
+import { CustomButton } from "button.slint";
+
+export struct LineEditInfo {
+    label: string,
+    text: string}
+
+export component Blur inherits Rectangle {
+    in property <bool> trigger;
+    in property <bool> freeze;
+
+    background: trigger ? #00000077 : #00000000;
+    animate background {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    TouchArea {
+        visible: parent.trigger && parent.freeze;
+    }
+}
+
+export component CustomLineEdit inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> text <=> line.text;
+
+    callback edited <=> line.edited;
+
+    x: 12px;
+    padding-bottom: 10px;
+    spacing: 5px;
+
+    Text {
+        vertical-alignment: center;
+        font-size: 15px;
+        text: label;
+    }
+
+    line := LineEdit {
+        height: self.preferred-height + 2px;
+        font-size: 15px;
+    }
+
+    CustomButton {
+        width: line.height;
+        height: self.width;
+        text-y: -7px;
+        font-size: 30px;
+        text: "\u{2BBE}";
+        hover-opacity: self.has-hover ? 0.1 : 0.0;
+        clicked => {
+            parent.text = "";
+            parent.edited("");
+            line.focus();
+        }
+    }
+}
+
+export component TopPanel inherits Rectangle {
+    in property <string> text_left <=> text_left.text;
+    in property <string> text_right <=> text_right.text;
+
+    y: 0px;
+    height: 50px;
+
+    text_left := Text {
+        x: 55px;
+        font-size: 30px;
+    }
+
+    text_right := Text {
+        x: parent.width - self.preferred-width - 10px;
+        font-size: 30px;
+    }
+
+    Rectangle {
+        y: 49px;
+        background: Palette.foreground;
+        height: 2px;
+    }
+}

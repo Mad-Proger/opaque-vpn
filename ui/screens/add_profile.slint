@@ -1,0 +1,97 @@
+import { LineEditInfo, CustomLineEdit } from "../utils.slint";
+import { BottomButton, CustomButton } from "../button.slint";
+
+component ManualScreen inherits Rectangle {
+    in-out property <[LineEditInfo]> info;
+
+    animate x {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    VerticalLayout {
+        for row[i] in info: CustomLineEdit {
+            width: parent.width - 2 * self.x;
+            label: row.label;
+            text: row.text;
+
+            edited => {
+                row.text = self.text;
+            }
+        }
+    }
+}
+
+component FromFileScreen inherits Rectangle {
+    in-out property <LineEditInfo> info;
+
+    callback browse();
+
+    animate x {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+    VerticalLayout {
+        line_edit := CustomLineEdit {
+            width: parent.width - 2 * self.x;
+            label: "File selected:";
+            text: info.text;
+
+            edited => {
+                info.text = self.text;
+            }
+        }
+    }
+
+    changed info => {
+        line_edit.text = info.text;
+    }
+
+    button := BottomButton {
+        y: root.height - parent.y - self.height;
+        text: "Browse";
+        background: #8b3d;
+
+        clicked => {
+            parent.browse();
+        }
+    }
+}
+
+export component AddProfileScreen inherits Rectangle {
+    property <[string]> labels: ["Manual", "From file"];
+    in-out property <[LineEditInfo]> manual_info;
+    in-out property <LineEditInfo> from_file_info;
+    in-out property <int> selection: 0;
+
+    callback browse <=> from_file.browse;
+
+    animate y {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    HorizontalLayout {
+        for label[i] in labels: CustomButton {
+            height: 30px;
+            font-size: 20px;
+            text: label;
+            hover-opacity: selection == i || self.has-hover ? 0.1 : 0.0;
+            clicked => {
+                root.selection = i;
+            }
+        }
+    }
+
+    manual := ManualScreen {
+        x: -self.width * 1.5 * selection;
+        y: 40px;
+        info <=> manual_info;
+    }
+
+    from_file := FromFileScreen {
+        x: self.width * 1.5 * (1 - selection);
+        y: 40px;
+        info <=> from_file_info;
+    }
+}

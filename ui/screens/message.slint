@@ -1,0 +1,45 @@
+import { VerticalBox, ScrollView, StandardButton} from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
+import { Blur } from "../utils.slint";
+
+export component MessageScreen inherits Rectangle {
+    in-out property <string> text <=> str.text;
+
+    Blur {
+        z: -1;
+        trigger: parent.text != "";
+        freeze: true;
+    }
+
+    opacity: text != "" ? 1 : 0;
+    animate opacity {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    Rectangle {
+        width: 320px;
+        height: 180px;
+        border-width: 1px;
+        border-color: Palette.foreground.with_alpha(0.6);
+
+        VerticalBox {
+            ScrollView {
+                VerticalLayout {
+                    str := Text {
+                        horizontal-stretch: 1;
+                        font-size: 15px;
+                        wrap: char-wrap;
+                    }
+                }
+            }
+
+            StandardButton {
+                kind: ok;
+                clicked => {
+                    root.text = "";
+                }
+            }
+        }
+    }
+}

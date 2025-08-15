@@ -1,12 +1,9 @@
+use crate::{AppWindow, LineEditInfo};
 use anyhow::Context;
-use slint::{ModelRc, SharedString, VecModel};
+
+use slint::{ModelRc, VecModel};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-pub enum PathView {
-    Stem,
-    FullPath,
-}
 
 pub fn collect_config_paths(dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
@@ -28,14 +25,31 @@ pub fn collect_config_paths(dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-pub fn paths_to_model(paths: &[PathBuf], view: PathView) -> ModelRc<SharedString> {
-    let items: Vec<SharedString> = paths
+pub fn paths_to_profiles(paths: &[std::path::PathBuf]) -> ModelRc<LineEditInfo> {
+    let vec: Vec<LineEditInfo> = paths
         .iter()
-        .filter_map(|p| match view {
-            PathView::Stem => p.file_stem()?.to_str().map(SharedString::from),
-            PathView::FullPath => p.to_str().map(SharedString::from),
+        .map(|p| {
+            let label = p
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .into();
+            let text = p.to_str().unwrap_or_default().into();
+            LineEditInfo { label, text }
         })
         .collect();
 
-    ModelRc::new(VecModel::from(items))
+    ModelRc::new(VecModel::from(vec))
+}
+
+pub fn set_profiles(app: &AppWindow) {
+    let config_paths = match collect_config_paths(Path::new("config")) {
+        Ok(addrs) => addrs,
+        Err(error) => {
+            app.set_message(format!("{error:#}").into());
+            Vec::new()
+        }
+    };
+
+    app.set_profiles(paths_to_profiles(&config_paths));
 }

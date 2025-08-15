@@ -1,0 +1,43 @@
+import { Palette } from "std-widgets.slint";
+
+export component CustomButton inherits Rectangle {
+    in property <length> text-y <=> str.y;
+    in property <length> font-size <=> str.font-size;
+    in property <string> text <=> str.text;
+    in property <float> text-opacity <=> str.opacity;
+    in property <float> hover-opacity <=> rectangle.opacity;
+    in property <bool> touch_area-visible <=> touch_area.visible;
+    out property <bool> has-hover <=> touch_area.has-hover;
+    out property <bool> pressed <=> touch_area.pressed;
+
+    callback clicked <=> touch_area.clicked;
+
+    str := Text {
+        opacity: !touch_area-visible || parent.pressed ? 0.5 : 1.0;
+    }
+
+    rectangle := Rectangle {
+        background: Palette.foreground;
+        opacity: 0;
+    }
+
+    touch_area := TouchArea { }
+}
+
+export component BottomButton inherits CustomButton {
+    in property <bool> trigger;
+
+    height: 50px;
+    text-y: 3px;
+    font-size: 30px;
+}
+
+export component MenuButton inherits CustomButton {
+    x: 0px;
+    y: 0px;
+    width: 50px;
+    height: 50px;
+    text-y: -19px;
+    font-size: 55px;
+    text: "\u{2261}";
+}

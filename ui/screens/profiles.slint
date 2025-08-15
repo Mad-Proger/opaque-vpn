@@ -1,0 +1,38 @@
+import { LineEditInfo } from "../utils.slint";
+import { CustomButton, BottomButton } from "../button.slint";
+
+export component ProfilesScreen inherits Rectangle {
+    in property <[LineEditInfo]> info;
+    in-out property <int> selected: -1;
+
+    callback clicked(LineEditInfo);
+    callback reload();
+
+    animate y {
+        duration: 200ms;
+        easing: ease-in-out;
+    }
+
+    VerticalLayout {
+        for row[i] in info: CustomButton {
+            height: 30px;
+            font-size: 20px;
+            text: row.label;
+            hover-opacity: self.has-hover || selected == i ? 0.1 : 0.0;
+            clicked => {
+                selected = i;
+                root.clicked(row);
+            }
+        }
+    }
+
+    button := BottomButton {
+        y: parent.height - self.height;
+        text: "Reload";
+        background: #8b3d;
+
+        clicked => {
+            parent.reload();
+        }
+    }
+}
