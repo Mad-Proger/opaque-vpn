@@ -11,6 +11,8 @@ use crate::{
 
 pub struct Connection<Stream: Send>(Stream);
 
+const XOR_ENC_KEY: u8 = 179;
+
 impl<Stream> Connection<Stream>
 where
     Stream: AsyncRead + AsyncWrite + Unpin + Send,
@@ -41,7 +43,11 @@ where
         mut self,
     ) -> std::io::Result<Connection<ObfuscatedStream<Stream>>> {
         let key = SharedKey::from_entropy();
-        self.0.write_all(key.as_bytes()).await?;
+        let mut key_bytes = *key.as_bytes();
+        for b in &mut key_bytes {
+            *b ^= XOR_ENC_KEY;
+        }
+        self.0.write_all(&key_bytes).await?;
         let config = Config::builder_with_shared_key(key)
             .with_default_cipher()
             .no_padding();
@@ -56,6 +62,9 @@ where
         // TODO: share key in a safe manner
         let mut key_bytes = [0u8; 32];
         self.0.read_exact(&mut key_bytes).await?;
+        for b in &mut key_bytes {
+            *b ^= XOR_ENC_KEY;
+        }
         let key = SharedKey::from(key_bytes);
         let config = Config::builder_with_shared_key(key)
             .with_default_cipher()
