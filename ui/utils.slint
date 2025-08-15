@@ -57,20 +57,27 @@ export component CustomLineEdit inherits HorizontalLayout {
 }
 
 export component TopPanel inherits Rectangle {
-    in property <string> text_left <=> text_left.text;
-    in property <string> text_right <=> text_right.text;
+    in property <string> text-left <=> text_left.text;
+    in property <string> text-right <=> text_right.text;
 
     y: 0px;
     height: 50px;
 
-    text_left := Text {
-        x: 55px;
-        font-size: 30px;
-    }
+    HorizontalLayout {
+        x: 50px;
+        width: parent.width - self.x;
+        padding-right: 5px;
+        padding-top: 4px;
+        alignment: space-between;
 
-    text_right := Text {
-        x: parent.width - self.preferred-width - 10px;
-        font-size: 30px;
+        text_left := Text {
+            font-size: 30px;
+        }
+
+        text_right := Text {
+            font-size: 30px;
+            color: #ff8b3d;
+        }
     }
 
     Rectangle {

@@ -30,8 +30,15 @@ use crate::{
     config::{Mode, load_config},
 };
 
-static STOP_SENDER: LazyLock<Mutex<Option<watch::Sender<bool>>>> =
-    LazyLock::new(|| Mutex::new(None));
+// To be given from library
+enum Status {
+    Disconnected,
+    Connected,
+    Disconnecting,
+    Connecting,
+}
+
+static STOP_SENDER: Mutex<Option<watch::Sender<bool>>> = Mutex::new(None);
 
 static TOKIO_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
     Builder::new_multi_thread()
@@ -60,12 +67,12 @@ fn browse_handler(app_weak: slint::Weak<AppWindow>) {
             .pick_file()
             .map(|p| p.display().to_string());
 
-        let _ = slint::invoke_from_event_loop(move || match app_weak.upgrade() {
+        if let Err(e) = slint::invoke_from_event_loop(move || match app_weak.upgrade() {
             Some(app) => {
                 if let Some(p) = file_path {
                     app.set_from_file(LineEditInfo {
+                        label: SharedString::from(""),
                         text: SharedString::from(p),
-                        ..app.get_from_file()
                     })
                 }
                 app.set_freeze(false);
@@ -73,22 +80,26 @@ fn browse_handler(app_weak: slint::Weak<AppWindow>) {
             None => {
                 error!("app downgraded before setting selected file");
             }
-        });
+        }) {
+            error!("failed to invoke {}", e);
+        }
     });
 }
 
 fn connect_handler(app_weak: slint::Weak<AppWindow>, client: Client) {
     TOKIO_RUNTIME.spawn(async move {
-        if let Err(e) = client.run().await {
-            let _ = slint::invoke_from_event_loop(move || match app_weak.upgrade() {
+        if let Err(err) = client.run().await
+            && let Err(e) = slint::invoke_from_event_loop(move || match app_weak.upgrade() {
                 Some(app) => {
-                    app.set_message(format!("{:#}", e).into());
-                    app.set_status(SharedString::from("Disconnected"));
+                    app.set_message(format!("{:#}", err).into());
+                    app.set_status(Status::Disconnected as i32);
                 }
                 None => {
                     error!("failed to upgrade link in connect_handler");
                 }
-            });
+            })
+        {
+            error!("failed to invoke {}", e);
         }
     });
 }
@@ -98,7 +109,7 @@ fn main() -> anyhow::Result<()> {
 
     let app = AppWindow::new()?;
     app.set_window_title(SharedString::from("Opaque VPN"));
-    app.set_status(SharedString::from("Disconnected"));
+    app.set_status(Status::Disconnected as i32);
     let app_weak = app.as_weak();
 
     set_profiles(&app);
@@ -127,20 +138,20 @@ fn main() -> anyhow::Result<()> {
     let app_weak_connect = app_weak.clone();
     app.on_connect(move || match app_weak_connect.upgrade() {
         Some(app) => {
-            app.set_status(SharedString::from("Connecting..."));
+            app.set_status(Status::Connecting as i32);
 
             let client = match get_client(&app) {
                 Ok(c) => c,
-                Err(error) => {
-                    app.set_message(format!("{error:#}").into());
-                    app.set_status(SharedString::from("Disconnected"));
+                Err(e) => {
+                    app.set_message(format!("{e:#}").into());
+                    app.set_status(Status::Disconnected as i32);
                     return;
                 }
             };
 
             *STOP_SENDER.lock().unwrap() = Some(client.stop_sender());
             connect_handler(app_weak_connect.clone(), client);
-            app.set_status(SharedString::from("Connected"));
+            app.set_status(Status::Connected as i32);
         }
         None => {
             error!("failed to upgrade link in disconnect");
@@ -150,6 +161,7 @@ fn main() -> anyhow::Result<()> {
     let app_weak_disconnect = app_weak.clone();
     app.on_disconnect(move || match app_weak_disconnect.upgrade() {
         Some(app) => {
+            app.set_status(Status::Disconnecting as i32);
             match STOP_SENDER
                 .lock()
                 .unwrap()
@@ -157,7 +169,7 @@ fn main() -> anyhow::Result<()> {
                 .context("no active connection to stop")
                 .and_then(|sender| Ok(sender.send(true)?))
             {
-                Ok(()) => app.set_status("Disconnected".into()),
+                Ok(()) => app.set_status(Status::Disconnected as i32),
                 Err(e) => app.set_message(format!("{e:#}").into()),
             }
         }

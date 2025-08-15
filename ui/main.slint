@@ -7,8 +7,11 @@ import { ProfilesScreen } from "screens/profiles.slint";
 import { MessageScreen } from "screens/message.slint";
 
 export component AppWindow inherits Window {
+    property <[string]> button_str: ["Connect", "Disconnect", "Disconnecting...", "Connecting..."];
+    property <[string]> status_str: ["Disconnected", "Connected", "Disconnecting", "Connecting"];
+
     in property <string> window_title;
-    in property <string> status;
+    in property <int> status;
     in property <bool> freeze;
     in property <[LineEditInfo]> profiles <=> profiles_screen.info;
     in-out property <string> message;
@@ -41,20 +44,20 @@ export component AppWindow inherits Window {
 
     message_screen := MessageScreen {
         z: 10;
-        text <=> message;
+        text <=> parent.message;
     }
 
     top_panel := TopPanel {
         width: parent.width;
-        text_left: menu_screen.section;
-        text_right: "Opaque VPN";
+        text-left: menu_screen.section;
+        text-right: parent.status_str[status] + (parent.status == 1 ? " to " + parent.from_file.label : "");
     }
 
     menu_screen := MenuScreen {
         z: 1;
         clicked(i) => {
             if (i != parent.menu_index) {
-                parent.from_file.text = "";
+                parent.from_file = { label: "", text: "" };
                 profiles_screen.selected = -1;
                 add_profile_screen.selection = 0;
             }
@@ -64,39 +67,39 @@ export component AppWindow inherits Window {
 
     add_profile_screen := AddProfileScreen {
         y: top_panel.height - parent.height * 1.5 * (parent.menu_index - 0);
-        height: root.height - top_panel.height - bottom_button.height;
-        manual_info <=> manual;
-        from_file_info <=> from_file;
+        height: parent.height - top_panel.height - bottom_button.height;
+        manual_info <=> parent.manual;
+        from_file_info <=> parent.from_file;
     }
 
     profiles_screen := ProfilesScreen {
         y: top_panel.height - parent.height * 1.5 * (parent.menu_index - 1);
-        height: root.height - top_panel.height - bottom_button.height;
+        height: parent.height - top_panel.height - bottom_button.height;
         clicked(info) => {
-            from_file = info;
+            parent.from_file = info;
         }
 
         reload => {
             parent.reload();
-            if (self.selected != -1 && self.selected < profiles.length) {
-                from_file = profiles[self.selected];
+            if (self.selected != -1 && self.selected < parent.profiles.length) {
+                parent.from_file = profiles[self.selected];
             } else {
-                from_file = { label: "", text: "" };
+                parent.from_file = { label: "", text: "" };
                 self.selected = -1;
             }
         }
     }
 
     bottom_button := BottomButton {
-        touch_area-visible: from_file.text != "";
-        y: root.height - parent.y - self.height;
-        text: status + (status == "Connected" ? " to " + from_file.label : "");
+        touch_area-visible: parent.from_file.text != "" && parent.status < 2;
+        y: parent.height - parent.y - self.height;
+        text: parent.button_str[status] + (parent.status == 0 && parent.from_file.label != "" ? " to " + parent.from_file.label : "");
         background: #ff8b3d;
         clicked => {
-            if (status == "Connected") {
-                disconnect();
-            } else if (status == "Disconnected") {
-                connect();
+            if (parent.status == 0) {
+                parent.connect();
+            } else if (parent.status != 2) {
+                parent.disconnect();
             }
         }
     }
