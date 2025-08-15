@@ -1,5 +1,5 @@
 import { VerticalBox,  ScrollView, StandardButton, Palette } from "std-widgets.slint";
-import { LineEditInfo, TopPanel } from "utils.slint";
+import { Blur, LineEditInfo, TopPanel } from "utils.slint";
 import { BottomButton } from "button.slint";
 import { MenuScreen } from "screens/menu.slint";
 import { AddProfileScreen } from "screens/add_profile.slint";
@@ -9,9 +9,9 @@ import { MessageScreen } from "screens/message.slint";
 export component AppWindow inherits Window {
     in property <string> window_title;
     in property <string> status;
-    in-out property <string> message;
+    in property <bool> freeze;
     in property <[LineEditInfo]> profiles <=> profiles_screen.info;
-
+    in-out property <string> message;
     in-out property <[LineEditInfo]> manual: [
         { label: "Address:", text: "" },
         { label: "Port:", text: "" },
@@ -20,7 +20,6 @@ export component AppWindow inherits Window {
         { label: "Key:", text: "" },
     ];
     in-out property <LineEditInfo> from_file: { label: "", text: "" };
-
     out property <int> menu_index: 0;
 
     callback browse <=> add_profile_screen.browse;
@@ -33,6 +32,12 @@ export component AppWindow inherits Window {
     min-width: 640px;
     min-height: 360px;
     title: window_title;
+
+    blur := Blur {
+        z: 2;
+        trigger: parent.freeze;
+        freeze: true;
+    }
 
     message_screen := MessageScreen {
         z: 10;

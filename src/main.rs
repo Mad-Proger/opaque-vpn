@@ -12,7 +12,7 @@ mod protocol;
 mod routing;
 mod server;
 
-use std::{path::Path, sync::LazyLock, sync::Mutex};
+use std::{sync::LazyLock, sync::Mutex};
 
 use anyhow::Context;
 use log::error;
@@ -28,7 +28,6 @@ use crate::config_paths::set_profiles;
 use crate::{
     client::Client,
     config::{Mode, load_config},
-    config_paths::{collect_config_paths, paths_to_profiles},
 };
 
 static STOP_SENDER: LazyLock<Mutex<Option<watch::Sender<bool>>>> =
@@ -69,6 +68,7 @@ fn browse_handler(app_weak: slint::Weak<AppWindow>) {
                         ..app.get_from_file()
                     })
                 }
+                app.set_freeze(false);
             }
             None => {
                 error!("app downgraded before setting selected file");
@@ -104,8 +104,14 @@ fn main() -> anyhow::Result<()> {
     set_profiles(&app);
 
     let app_weak_browse = app_weak.clone();
-    app.on_browse(move || {
-        browse_handler(app_weak_browse.clone());
+    app.on_browse(move || match app_weak_browse.upgrade() {
+        Some(app) => {
+            app.set_freeze(true);
+            browse_handler(app_weak_browse.clone());
+        }
+        None => {
+            error!("failed to upgrade link in disconnect");
+        }
     });
 
     let app_weak_reload = app_weak.clone();
@@ -119,8 +125,8 @@ fn main() -> anyhow::Result<()> {
     });
 
     let app_weak_connect = app_weak.clone();
-    app.on_connect(move || {
-        if let Some(app) = app_weak_connect.upgrade() {
+    app.on_connect(move || match app_weak_connect.upgrade() {
+        Some(app) => {
             app.set_status(SharedString::from("Connecting..."));
 
             let client = match get_client(&app) {
@@ -135,6 +141,9 @@ fn main() -> anyhow::Result<()> {
             *STOP_SENDER.lock().unwrap() = Some(client.stop_sender());
             connect_handler(app_weak_connect.clone(), client);
             app.set_status(SharedString::from("Connected"));
+        }
+        None => {
+            error!("failed to upgrade link in disconnect");
         }
     });
 
