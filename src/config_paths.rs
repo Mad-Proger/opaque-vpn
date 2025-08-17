@@ -53,3 +53,10 @@ pub fn set_profiles(app: &AppWindow) {
 
     app.set_profiles(paths_to_profiles(&config_paths));
 }
+
+pub fn name_from_path(path: &Path) -> String {
+    path.file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_string()
+}

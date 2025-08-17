@@ -6,12 +6,24 @@ import { AddProfileScreen } from "screens/add_profile.slint";
 import { ProfilesScreen } from "screens/profiles.slint";
 import { MessageScreen } from "screens/message.slint";
 
-export component AppWindow inherits Window {
-    property <[string]> button_str: ["Connect", "Disconnect", "Disconnecting...", "Connecting..."];
-    property <[string]> status_str: ["Disconnected", "Connected", "Disconnecting", "Connecting"];
+export global Status {
+    in property <int> status: 0;
+    out property <string> status_text:
+        status == 0 ? "Disconnected" : status == 1 ? "Connected" : status == 2 ? "Disconnecting" : "Connecting";
+    out property <string> button_text:
+        status == 0 ? "Connect" : status == 1 ? "Disconnect" : status == 2 ? "Disconnecting..." : "Abort";
+    out property <bool> is_disconnected: status == 0;
+    out property <bool> is_connected: status == 1;
+    out property <bool> is_disconnecting: status == 2;
+    out property <bool> is_connecting: status == 3;
 
+    public pure function conf_label(trigger: bool, label: string) -> string {
+        return trigger && label != "" ? " to " + label : "";
+    }
+}
+
+export component AppWindow inherits Window {
     in property <string> window_title;
-    in property <int> status;
     in property <bool> freeze;
     in property <[LineEditInfo]> profiles <=> profiles_screen.info;
     in-out property <string> message;
@@ -50,7 +62,7 @@ export component AppWindow inherits Window {
     top_panel := TopPanel {
         width: parent.width;
         text-left: menu_screen.section;
-        text-right: parent.status_str[status] + (parent.status == 1 ? " to " + parent.from_file.label : "");
+        text-right: Status.status_text + Status.conf_label(Status.is_connected, parent.from_file.label);
     }
 
     menu_screen := MenuScreen {
@@ -91,14 +103,14 @@ export component AppWindow inherits Window {
     }
 
     bottom_button := BottomButton {
-        touch_area-visible: parent.from_file.text != "" && parent.status < 2;
+        touch_area-visible: parent.from_file.text != "" && !Status.is_disconnecting;
         y: parent.height - parent.y - self.height;
-        text: parent.button_str[status] + (parent.status == 0 && parent.from_file.label != "" ? " to " + parent.from_file.label : "");
+        text: Status.button_text + Status.conf_label(Status.is_disconnected, parent.from_file.label);
         background: #ff8b3d;
         clicked => {
-            if (parent.status == 0) {
+            if (Status.is_disconnected) {
                 parent.connect();
-            } else if (parent.status != 2) {
+            } else if (!Status.is_disconnecting) {
                 parent.disconnect();
             }
         }
